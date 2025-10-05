@@ -1,3 +1,5 @@
+[![Build Firmware](https://github.com/atomic14/ch32v003-music/actions/workflows/build-firmware.yml/badge.svg)](https://github.com/atomic14/ch32v003-music/actions/workflows/build-firmware.yml)
+
 # Brain Transplant
 
 A hardware project that plays "The Munsters" theme song through a piezo buzzer using a CH32V003J4M6 RISC-V microcontroller. The project includes tools to convert MIDI and audio files into optimized C code for embedded systems.
