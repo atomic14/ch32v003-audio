@@ -41,6 +41,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install platformio
     
+    - name: Install CH32V platform
+      run: pio pkg install -g -p https://github.com/Community-PIO-CH32V/platform-ch32v.git
+    
     - name: Build firmware
       run: |
         cd firmware
