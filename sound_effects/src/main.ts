@@ -1,7 +1,7 @@
-import './style.css'
-import { OneBitSoundEngine } from './soundEngine'
-import type { SoundParameters } from './soundEngine'
-import { presets } from './presets'
+import './style.css';
+import { OneBitSoundEngine } from './soundEngine';
+import type { SoundParameters } from './soundEngine';
+import { presets } from './presets';
 
 const engine = new OneBitSoundEngine();
 
@@ -142,7 +142,7 @@ presets.forEach((preset, index) => {
     <div class="preset-desc">${preset.description}</div>
   `;
   button.addEventListener('click', () => {
-    document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.preset-btn').forEach((btn) => btn.classList.remove('active'));
     button.classList.add('active');
     loadPreset(preset.params);
   });
@@ -152,7 +152,7 @@ presets.forEach((preset, index) => {
 // Load preset into controls
 function loadPreset(params: SoundParameters) {
   currentParams = { ...params };
-  
+
   (document.getElementById('startFreq') as HTMLInputElement).value = String(params.startFreq);
   (document.getElementById('endFreq') as HTMLInputElement).value = String(params.endFreq);
   (document.getElementById('duration') as HTMLInputElement).value = String(params.duration);
@@ -161,11 +161,11 @@ function loadPreset(params: SoundParameters) {
   (document.getElementById('decay') as HTMLInputElement).value = String(params.decay * 100);
   (document.getElementById('vibrato') as HTMLInputElement).value = String(params.vibrato * 100);
   (document.getElementById('vibratoSpeed') as HTMLInputElement).value = String(params.vibratoSpeed);
-  
-  document.querySelectorAll('input[name="waveform"]').forEach(radio => {
+
+  document.querySelectorAll('input[name="waveform"]').forEach((radio) => {
     (radio as HTMLInputElement).checked = (radio as HTMLInputElement).value === params.waveform;
   });
-  
+
   updateDisplayValues();
 }
 
@@ -174,10 +174,13 @@ function updateDisplayValues() {
   document.getElementById('startFreqValue')!.textContent = `${currentParams.startFreq} Hz`;
   document.getElementById('endFreqValue')!.textContent = `${currentParams.endFreq} Hz`;
   document.getElementById('durationValue')!.textContent = `${currentParams.duration} ms`;
-  document.getElementById('dutyCycleValue')!.textContent = `${Math.round(currentParams.dutyCycle * 100)}%`;
-  document.getElementById('attackValue')!.textContent = `${Math.round(currentParams.attack * 100)}%`;
+  document.getElementById('dutyCycleValue')!.textContent =
+    `${Math.round(currentParams.dutyCycle * 100)}%`;
+  document.getElementById('attackValue')!.textContent =
+    `${Math.round(currentParams.attack * 100)}%`;
   document.getElementById('decayValue')!.textContent = `${Math.round(currentParams.decay * 100)}%`;
-  document.getElementById('vibratoValue')!.textContent = `${Math.round(currentParams.vibrato * 100)}%`;
+  document.getElementById('vibratoValue')!.textContent =
+    `${Math.round(currentParams.vibrato * 100)}%`;
   document.getElementById('vibratoSpeedValue')!.textContent = `${currentParams.vibratoSpeed} Hz`;
 }
 
@@ -222,7 +225,7 @@ document.getElementById('vibratoSpeed')!.addEventListener('input', (e) => {
   updateDisplayValues();
 });
 
-document.querySelectorAll('input[name="waveform"]').forEach(radio => {
+document.querySelectorAll('input[name="waveform"]').forEach((radio) => {
   radio.addEventListener('change', (e) => {
     currentParams.waveform = (e.target as HTMLInputElement).value as 'square' | 'noise';
   });
@@ -247,7 +250,7 @@ document.getElementById('exportPyBtn')!.addEventListener('click', () => {
 // Copy button
 document.getElementById('copyBtn')!.addEventListener('click', () => {
   const output = document.getElementById('exportOutput')!.textContent || '';
-  navigator.clipboard.writeText(output).then(() => {
+  void navigator.clipboard.writeText(output).then(() => {
     const btn = document.getElementById('copyBtn')!;
     const originalText = btn.textContent;
     btn.textContent = '✓ Copied!';

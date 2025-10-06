@@ -19,8 +19,8 @@ export const presets: Preset[] = [
       decay: 0.3,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Coin',
@@ -34,8 +34,8 @@ export const presets: Preset[] = [
       decay: 0.2,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Shoot',
@@ -49,8 +49,8 @@ export const presets: Preset[] = [
       decay: 0.4,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Explosion',
@@ -64,8 +64,8 @@ export const presets: Preset[] = [
       decay: 0.5,
       waveform: 'noise',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Hit',
@@ -79,8 +79,8 @@ export const presets: Preset[] = [
       decay: 0.5,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Power Up',
@@ -94,8 +94,8 @@ export const presets: Preset[] = [
       decay: 0.3,
       waveform: 'square',
       vibrato: 0.05,
-      vibratoSpeed: 10
-    }
+      vibratoSpeed: 10,
+    },
   },
   {
     name: 'Select',
@@ -109,8 +109,8 @@ export const presets: Preset[] = [
       decay: 0.2,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Beep',
@@ -124,8 +124,8 @@ export const presets: Preset[] = [
       decay: 0.05,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Alarm',
@@ -139,8 +139,8 @@ export const presets: Preset[] = [
       decay: 0.01,
       waveform: 'square',
       vibrato: 0.2,
-      vibratoSpeed: 15
-    }
+      vibratoSpeed: 15,
+    },
   },
   {
     name: 'Step',
@@ -154,8 +154,8 @@ export const presets: Preset[] = [
       decay: 0.8,
       waveform: 'noise',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
+      vibratoSpeed: 0,
+    },
   },
   {
     name: 'Door Open',
@@ -169,8 +169,8 @@ export const presets: Preset[] = [
       decay: 0.3,
       waveform: 'square',
       vibrato: 0.1,
-      vibratoSpeed: 5
-    }
+      vibratoSpeed: 5,
+    },
   },
   {
     name: 'Error',
@@ -184,8 +184,7 @@ export const presets: Preset[] = [
       decay: 0.1,
       waveform: 'square',
       vibrato: 0,
-      vibratoSpeed: 0
-    }
-  }
+      vibratoSpeed: 0,
+    },
+  },
 ];
-
