@@ -1,4 +1,5 @@
 [![Build Firmware](https://github.com/atomic14/ch32v003-music/actions/workflows/build-firmware.yml/badge.svg)](https://github.com/atomic14/ch32v003-music/actions/workflows/build-firmware.yml)
+[![Sound Effects CI](https://github.com/atomic14/ch32v003-music/actions/workflows/sound-effects-ci.yml/badge.svg)](https://github.com/atomic14/ch32v003-music/actions/workflows/sound-effects-ci.yml)
 
 # Brain Transplant
 
