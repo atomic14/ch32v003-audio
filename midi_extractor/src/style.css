@@ -112,12 +112,50 @@ h2 {
   border-left: 4px solid var(--primary);
 }
 
-.file-info p {
+.file-info-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.file-stats p {
   margin-bottom: 0.5rem;
 }
 
 .file-info strong {
   color: var(--primary);
+}
+
+.filter-controls {
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.95rem;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.checkbox-label:hover span {
+  color: var(--primary);
+}
+
+.no-tracks-message {
+  text-align: center;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 1rem;
 }
 
 /* Tracks Section */
@@ -134,23 +172,36 @@ h2 {
   background: var(--bg-card);
   padding: 1.5rem;
   border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   border: 2px solid transparent;
   transition: all 0.3s ease;
-  cursor: pointer;
+  overflow: hidden;
 }
 
 .track-card:hover {
   background: var(--bg-hover);
   border-color: var(--primary);
-  transform: translateX(4px);
 }
 
 .track-card.selected {
   border-color: var(--success);
   background: rgba(76, 175, 80, 0.1);
+}
+
+.track-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.track-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.track-info {
+  flex: 1;
 }
 
 .track-name {
@@ -164,32 +215,27 @@ h2 {
   font-size: 0.9rem;
 }
 
-/* Visualization Section */
-.visualization-section {
-  margin-bottom: 2rem;
-}
-
-.canvas-container {
-  background: var(--bg-card);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
+.track-preview-container {
+  background: #1a1a1a;
+  border-radius: 6px;
+  padding: 0.5rem;
   overflow-x: auto;
   overflow-y: hidden;
-  min-height: 420px;
+  min-height: 110px;
+  max-width: 100%;
   width: 100%;
 }
 
-#visualizer-canvas {
+.track-preview-canvas {
   display: block;
   border-radius: 4px;
-  cursor: pointer;
 }
 
-.player-controls {
+.track-player-controls {
   display: flex;
-  gap: 1rem;
-  justify-content: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
 }
 
 /* Export Section */
@@ -353,10 +399,14 @@ h2 {
     padding: 3rem 1rem;
   }
 
-  .track-card {
+  .track-header {
     flex-direction: column;
     gap: 1rem;
     align-items: flex-start;
+  }
+
+  .track-player-controls {
+    flex-wrap: wrap;
   }
 
   .export-controls {

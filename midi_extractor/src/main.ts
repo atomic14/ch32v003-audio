@@ -6,8 +6,9 @@ import { MidiPlayer } from './player';
 
 let currentMidi: ParsedMidi | null = null;
 let selectedTrackIndex: number | null = null;
-let visualizer: MidiVisualizer | null = null;
-let player: MidiPlayer | null = null;
+let trackPlayers: Map<number, MidiPlayer> = new Map();
+let trackVisualizers: Map<number, MidiVisualizer> = new Map();
+let showEmptyTracks: boolean = false;
 
 function initializeApp() {
   const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -36,29 +37,8 @@ function initializeApp() {
         <div class="file-info" id="file-info"></div>
         
         <div class="tracks-section">
-          <h2>Select a Track</h2>
+          <h2>Select a Track to Export</h2>
           <div class="tracks-list" id="tracks-list"></div>
-        </div>
-
-        <div class="visualization-section hidden" id="visualization-section">
-          <h2>Track Preview</h2>
-          <div class="canvas-container">
-            <canvas id="visualizer-canvas"></canvas>
-          </div>
-          <div class="player-controls">
-            <button id="play-btn" class="btn btn-primary">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              Play
-            </button>
-            <button id="stop-btn" class="btn btn-secondary">
-              <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12"/>
-              </svg>
-              Stop
-            </button>
-          </div>
         </div>
 
         <div class="export-section hidden" id="export-section">
@@ -102,8 +82,6 @@ function initializeApp() {
 function setupEventListeners() {
   const dropZone = document.getElementById('drop-zone')!;
   const fileInput = document.getElementById('file-input') as HTMLInputElement;
-  const playBtn = document.getElementById('play-btn')!;
-  const stopBtn = document.getElementById('stop-btn')!;
   const exportBtn = document.getElementById('export-btn')!;
   const copyBtn = document.getElementById('copy-btn')!;
   const resetBtn = document.getElementById('reset-btn')!;
@@ -132,26 +110,6 @@ function setupEventListeners() {
     if (file) handleFile(file);
   });
 
-  // Player controls
-  playBtn.addEventListener('click', () => {
-    if (player) {
-      if (player.getIsPlaying()) {
-        player.pause();
-        updatePlayButton(false);
-      } else {
-        player.play();
-        updatePlayButton(true);
-      }
-    }
-  });
-
-  stopBtn.addEventListener('click', () => {
-    if (player) {
-      player.stop();
-      updatePlayButton(false);
-    }
-  });
-
   // Export controls
   exportBtn.addEventListener('click', exportCode);
   copyBtn.addEventListener('click', copyCode);
@@ -163,11 +121,37 @@ async function handleFile(file: File) {
     const arrayBuffer = await file.arrayBuffer();
     currentMidi = parseMidiFile(arrayBuffer);
 
+    // Calculate track statistics
+    const totalTracks = currentMidi.tracks.length;
+    const tracksWithNotes = currentMidi.tracks.filter(t => t.noteCount > 0).length;
+    const emptyTracks = totalTracks - tracksWithNotes;
+
     // Update UI
     document.getElementById('file-info')!.innerHTML = `
-      <p><strong>File:</strong> ${file.name}</p>
-      <p><strong>Tracks:</strong> ${currentMidi.tracks.length}</p>
+      <div class="file-info-content">
+        <div class="file-stats">
+          <p><strong>File:</strong> ${file.name}</p>
+          <p><strong>Total Tracks:</strong> ${totalTracks} (${tracksWithNotes} with notes${emptyTracks > 0 ? `, ${emptyTracks} empty` : ''})</p>
+        </div>
+        ${emptyTracks > 0 ? `
+          <div class="filter-controls">
+            <label class="checkbox-label">
+              <input type="checkbox" id="show-empty-tracks" ${showEmptyTracks ? 'checked' : ''} />
+              <span>Show tracks with no notes</span>
+            </label>
+          </div>
+        ` : ''}
+      </div>
     `;
+
+    // Add event listener for checkbox if it exists
+    const checkbox = document.getElementById('show-empty-tracks') as HTMLInputElement;
+    if (checkbox) {
+      checkbox.addEventListener('change', (e) => {
+        showEmptyTracks = (e.target as HTMLInputElement).checked;
+        displayTracks(currentMidi!);
+      });
+    }
 
     displayTracks(currentMidi);
 
@@ -182,21 +166,75 @@ function displayTracks(midi: ParsedMidi) {
   const tracksList = document.getElementById('tracks-list')!;
   tracksList.innerHTML = '';
 
-  midi.tracks.forEach((track) => {
+  // Filter tracks based on showEmptyTracks setting
+  const tracksToShow = midi.tracks.filter(track => showEmptyTracks || track.noteCount > 0);
+
+  if (tracksToShow.length === 0) {
+    tracksList.innerHTML = '<p class="no-tracks-message">No tracks with notes found in this file.</p>';
+    return;
+  }
+
+  tracksToShow.forEach((track) => {
     const trackCard = document.createElement('div');
     trackCard.className = 'track-card';
     trackCard.innerHTML = `
-      <div class="track-info">
-        <div class="track-name">${track.name}</div>
-        <div class="track-details">Track ${track.index + 1} • ${track.noteCount} notes</div>
-  </div>
-      <button class="btn btn-small" data-track="${track.index}">Select</button>
+      <div class="track-content">
+        <div class="track-header">
+          <div class="track-info">
+            <div class="track-name">${track.name}</div>
+            <div class="track-details">Track ${track.index + 1} • ${track.noteCount} notes</div>
+          </div>
+          <button class="btn btn-small select-btn" data-track="${track.index}">Select</button>
+        </div>
+        <div class="track-preview-container">
+          <canvas class="track-preview-canvas" id="track-canvas-${track.index}"></canvas>
+        </div>
+        <div class="track-player-controls">
+          <button class="btn btn-small btn-primary play-track-btn" data-track="${track.index}">
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            Play
+          </button>
+          <button class="btn btn-small btn-secondary stop-track-btn" data-track="${track.index}" disabled>
+            <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12"/>
+            </svg>
+            Stop
+          </button>
+        </div>
+      </div>
     `;
 
-    const selectBtn = trackCard.querySelector('button')!;
+    const selectBtn = trackCard.querySelector('.select-btn')!;
     selectBtn.addEventListener('click', () => selectTrack(track.index));
 
+    const playBtn = trackCard.querySelector('.play-track-btn')!;
+    const stopBtn = trackCard.querySelector('.stop-track-btn')!;
+
+    playBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleTrackPlayback(track.index, playBtn as HTMLButtonElement, stopBtn as HTMLButtonElement);
+    });
+
+    stopBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      stopTrackPlayback(track.index, playBtn as HTMLButtonElement, stopBtn as HTMLButtonElement);
+    });
+
     tracksList.appendChild(trackCard);
+
+    // Initialize compact visualizer for this track
+    const canvas = document.getElementById(`track-canvas-${track.index}`) as HTMLCanvasElement;
+    const notes = getTrackNotes(midi.midi, track.index);
+    const trackViz = new MidiVisualizer(canvas, {
+      compact: true,
+      height: 100,
+      showLabels: false,
+      clickable: false,
+    });
+    trackViz.setNotes(notes);
+    trackVisualizers.set(track.index, trackViz);
   });
 }
 
@@ -214,61 +252,15 @@ function selectTrack(index: number) {
     }
   });
 
-  // Get track notes
-  const notes = getTrackNotes(currentMidi.midi, index);
-
-  // Initialize visualizer
-  const canvas = document.getElementById('visualizer-canvas') as HTMLCanvasElement;
-  if (!visualizer) {
-    visualizer = new MidiVisualizer(canvas);
-    window.addEventListener('resize', () => visualizer?.resize());
-  }
-  visualizer.setNotes(notes);
-
-  // Initialize player
-  if (!player) {
-    player = new MidiPlayer();
-    player.setOnTimeUpdate((time) => {
-      visualizer?.setCurrentTime(time);
-    });
-  }
-  player.setNotes(notes);
-
-  // Connect visualizer seek to player
-  visualizer.setOnSeek((time) => {
-    player?.seek(time);
-  });
-
   // Generate and display C code
   const cCode = trackToBuzzerC(currentMidi.midi, index);
   document.getElementById('code-output')!.textContent = cCode;
 
-  // Show sections
-  document.getElementById('visualization-section')!.classList.remove('hidden');
+  // Show export section
   document.getElementById('export-section')!.classList.remove('hidden');
 
-  // Scroll to visualization
-  document.getElementById('visualization-section')!.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-function updatePlayButton(isPlaying: boolean) {
-  const playBtn = document.getElementById('play-btn')!;
-  if (isPlaying) {
-    playBtn.innerHTML = `
-      <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
-        <rect x="6" y="4" width="4" height="16"/>
-        <rect x="14" y="4" width="4" height="16"/>
-      </svg>
-      Pause
-    `;
-  } else {
-    playBtn.innerHTML = `
-      <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M8 5v14l11-7z"/>
-      </svg>
-      Play
-    `;
-  }
+  // Scroll to export section
+  document.getElementById('export-section')!.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function exportCode() {
@@ -312,17 +304,99 @@ async function copyCode() {
 function reset() {
   currentMidi = null;
   selectedTrackIndex = null;
-  
-  if (player) {
-    player.stop();
-  }
+  showEmptyTracks = false;
+
+  // Stop all track players
+  trackPlayers.forEach(player => player.stop());
+  trackPlayers.clear();
+  trackVisualizers.clear();
 
   document.getElementById('upload-section')!.classList.remove('hidden');
   document.getElementById('content-section')!.classList.add('hidden');
-  document.getElementById('visualization-section')!.classList.add('hidden');
   document.getElementById('export-section')!.classList.add('hidden');
 
   (document.getElementById('file-input') as HTMLInputElement).value = '';
+}
+
+function toggleTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, stopBtn: HTMLButtonElement) {
+  if (!currentMidi) return;
+
+  // Stop all other track players
+  trackPlayers.forEach((player, index) => {
+    if (index !== trackIndex) {
+      player.stop();
+      updateTrackPlayerButtons(index, false);
+    }
+  });
+
+  let trackPlayer = trackPlayers.get(trackIndex);
+  const trackViz = trackVisualizers.get(trackIndex);
+  
+  if (!trackPlayer) {
+    // Create new player for this track
+    trackPlayer = new MidiPlayer();
+    const notes = getTrackNotes(currentMidi.midi, trackIndex);
+    trackPlayer.setNotes(notes);
+    
+    // Connect player to visualizer
+    if (trackViz) {
+      trackPlayer.setOnTimeUpdate((time) => {
+        trackViz.setCurrentTime(time);
+      });
+    }
+    
+    trackPlayers.set(trackIndex, trackPlayer);
+  }
+
+  if (trackPlayer.getIsPlaying()) {
+    trackPlayer.pause();
+    updateTrackButton(playBtn, false);
+    stopBtn.disabled = false;
+  } else {
+    trackPlayer.play();
+    updateTrackButton(playBtn, true);
+    stopBtn.disabled = false;
+  }
+}
+
+function stopTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, stopBtn: HTMLButtonElement) {
+  const trackPlayer = trackPlayers.get(trackIndex);
+  if (trackPlayer) {
+    trackPlayer.stop();
+    updateTrackButton(playBtn, false);
+    stopBtn.disabled = true;
+  }
+}
+
+function updateTrackButton(playBtn: HTMLButtonElement, isPlaying: boolean) {
+  if (isPlaying) {
+    playBtn.innerHTML = `
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+        <rect x="6" y="4" width="4" height="16"/>
+        <rect x="14" y="4" width="4" height="16"/>
+      </svg>
+      Pause
+    `;
+  } else {
+    playBtn.innerHTML = `
+      <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M8 5v14l11-7z"/>
+      </svg>
+      Play
+    `;
+  }
+}
+
+function updateTrackPlayerButtons(trackIndex: number, isPlaying: boolean) {
+  const trackCard = document.querySelector(`[data-track="${trackIndex}"]`)?.closest('.track-card');
+  if (trackCard) {
+    const playBtn = trackCard.querySelector('.play-track-btn') as HTMLButtonElement;
+    const stopBtn = trackCard.querySelector('.stop-track-btn') as HTMLButtonElement;
+    if (playBtn && stopBtn) {
+      updateTrackButton(playBtn, isPlaying);
+      stopBtn.disabled = !isPlaying;
+    }
+  }
 }
 
 // Initialize the app
