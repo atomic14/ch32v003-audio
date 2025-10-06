@@ -221,8 +221,8 @@ int main(void) {
 
     // Still high? (defensive) — not strictly required if your source is clean
     if (isTriggerHigh()) {
-      // play_music(7000000); // your existing bit-banged audio
-      play_sound_effect();
+      play_music(7000000); // your existing bit-banged audio
+      //play_sound_effect();
     }
 
     // Now wait for release before re-arming (no busy loop):
