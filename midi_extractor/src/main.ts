@@ -17,7 +17,17 @@ function initializeApp() {
     <div class="container">
       <header>
         <h1>🎵 MIDI to Buzzer C Code</h1>
-        <p class="subtitle">Upload a MIDI file, select a track, and export C code for buzzer control</p>
+        <p class="subtitle">Convert MIDI music files into C code for Arduino/embedded system buzzers</p>
+        <div class="info-box">
+          <h3>How it works:</h3>
+          <ol class="steps-list">
+            <li>📁 Upload a MIDI file (.mid or .midi)</li>
+            <li>🎼 Preview and listen to each track</li>
+            <li>✅ Select a track to export</li>
+            <li>💾 Download C code with note frequencies and timing</li>
+          </ol>
+          <p class="help-text">The generated C code can be used with Arduino's <code>tone()</code> function or similar buzzer control methods.</p>
+        </div>
       </header>
 
       <div class="upload-section" id="upload-section">
