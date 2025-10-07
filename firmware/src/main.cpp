@@ -13,14 +13,19 @@
 #include <debug.h>
 
 /* Music output pin - PD6 */
-#define BLINKY_GPIO_PORT GPIOD
-#define BLINKY_GPIO_PIN GPIO_Pin_6
-#define BLINKY_CLOCK RCC_APB2Periph_GPIOD
+#define BUZZER_GPIO_PORT GPIOD
+#define BUZZER_GPIO_PIN GPIO_Pin_6
+#define BUZZER_CLOCK RCC_APB2Periph_GPIOD
 
 /* Input trigger pin - PC1 */
 #define TRIGGER_GPIO_PORT GPIOC
 #define TRIGGER_GPIO_PIN GPIO_Pin_1
 #define TRIGGER_CLOCK RCC_APB2Periph_GPIOC
+
+/* Debug LED pin - PC4 */
+#define LED_GPIO_PORT GPIOC
+#define LED_GPIO_PIN GPIO_Pin_4
+#define LED_CLOCK RCC_APB2Periph_GPIOC
 
 extern "C" void NMI_Handler(void)
     __attribute__((interrupt("WCH-Interrupt-fast")));
@@ -29,12 +34,12 @@ extern "C" void HardFault_Handler(void)
 
 static void setupPin() {
   // Setup output pin for music (PD6)
-  RCC_APB2PeriphClockCmd(BLINKY_CLOCK, ENABLE);
+  RCC_APB2PeriphClockCmd(BUZZER_CLOCK, ENABLE);
   GPIO_InitTypeDef GPIO_InitStructure = {0};
-  GPIO_InitStructure.GPIO_Pin = BLINKY_GPIO_PIN;
+  GPIO_InitStructure.GPIO_Pin = BUZZER_GPIO_PIN;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_10MHz;
-  GPIO_Init(BLINKY_GPIO_PORT, &GPIO_InitStructure);
+  GPIO_Init(BUZZER_GPIO_PORT, &GPIO_InitStructure);
 }
 
 static volatile bool trigger_flag = 0;
@@ -73,21 +78,31 @@ static void setupTriggerEXTI(void) {
   NVIC_Init(&ni);
 }
 
-static inline void sleep_until_irq(void) {
-  __WFI(); // CPU halts until any enabled IRQ (like EXTI1)
-}
-
 static inline bool isTriggerHigh() {
   return GPIO_ReadInputDataBit(TRIGGER_GPIO_PORT, TRIGGER_GPIO_PIN) == Bit_SET;
 }
 
 static inline void setHigh() {
-  GPIO_WriteBit(BLINKY_GPIO_PORT, BLINKY_GPIO_PIN, BitAction::Bit_SET);
+  GPIO_WriteBit(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN, BitAction::Bit_SET);
 }
 
 static inline void setLow() {
-  GPIO_WriteBit(BLINKY_GPIO_PORT, BLINKY_GPIO_PIN, BitAction::Bit_RESET);
+  GPIO_WriteBit(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN, BitAction::Bit_RESET);
 }
+
+
+static void enter_standby(void) {
+  // 0) Make sure pending EXTI is cleared
+  EXTI_ClearITPendingBit(EXTI_Line1);
+
+  // 3) Deep-sleep + PDDS
+  PFIC->SCTLR |= (1u << 2);              // SLEEPDEEP
+  PWR->CTLR   |= (1u << 1);              // PDDS (bit positions per your headers)
+
+  __WFE();                               // Enter Standby
+  __NOP();                               // (execution resumes here after wake)
+}
+
 
 /**
  * Plays the music by iterating through note commands and toggling the GPIO pin
@@ -131,9 +146,11 @@ void play_music(int max_len_us) {
     int elapsed = 0;
     while (elapsed < n.duration_us) {
       setHigh();                    // Turn on the buzzer
+      // Delay_Us(20);
       Delay_Us(n.period_us / 2);    // Wait for half the period
       setLow();                     // Turn off the buzzer
-      Delay_Us(n.period_us / 2);    // Wait for the other half
+      // Delay_Us(n.period_us - 20);    // Wait for the other half
+      Delay_Us(n.period_us / 2);    // Wait for half the period
       elapsed += n.period_us;       // Track how long we've been playing
     }
     
@@ -207,39 +224,30 @@ int main(void) {
   SystemCoreClockUpdate();
   Delay_Init();
 
+  // delay in case we are
+  Delay_Ms(2000);
+
   setupPin();
-  // setupTriggerPin();
   setupTriggerEXTI();
 
   while (1) {
-    while (!trigger_flag)
-      sleep_until_irq();
-    trigger_flag = false;
-
-    // Optional: quick debounce if your source is noisy
-    Delay_Ms(10);
-
-    // Still high? (defensive) — not strictly required if your source is clean
-    if (isTriggerHigh()) {
-      play_music(7000000); // your existing bit-banged audio
-      //play_sound_effect();
+    while (!trigger_flag) {
+      // prepare pins (make all but PC1 analog; ensure LED truly off)
+      // prepare_pins_for_standby();
+    
+      // clear EXTI1 pending and enter true standby
+      EXTI_ClearITPendingBit(EXTI_Line1);
+      enter_standby();
+    
+      // after wake: re-init clocks/peripherals you need
+      SystemCoreClockUpdate();
+      Delay_Init();
+      setupPin();     // buzzer
+      // (EXTI config usually persists, but cheap to re-assert if needed)
     }
-
-    // Now wait for release before re-arming (no busy loop):
-    EXTI_InitTypeDef ei = {0};
-    ei.EXTI_Line = EXTI_Line1;
-    ei.EXTI_Mode = EXTI_Mode_Interrupt;
-    ei.EXTI_Trigger = EXTI_Trigger_Falling; // wait until PC1 goes LOW
-    ei.EXTI_LineCmd = ENABLE;
-    EXTI_Init(&ei);
-
-    while (!trigger_flag)
-      sleep_until_irq();
-    trigger_flag = 0;
-
-    // Re-arm for next rising edge
-    ei.EXTI_Trigger = EXTI_Trigger_Rising;
-    EXTI_Init(&ei);
+    trigger_flag = false;
+      
+    play_music(7000000); // your existing bit-banged audio
   }
 }
 

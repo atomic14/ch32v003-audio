@@ -77,3 +77,13 @@ Music data is generated from MIDI files using the Python script located in `../s
 - The maximum single delay is capped at 500ms (500,000 microseconds) for longer pauses
 - The trigger uses a pull-down configuration, so it expects an active-high signal
 
+
+## HELP!
+
+If you brick your board. You can bring it back to life by doing:
+
+```
+./wlink erase --method power-off --chip CH32V003 
+```
+
+You can get the wlink application from here: https://github.com/ch32-rs/wlink
