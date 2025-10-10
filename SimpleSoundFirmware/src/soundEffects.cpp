@@ -1,4 +1,4 @@
-#include "SoundEffects.h"
+#include "soundEffects.h"
 #include "HAL.h"
 #include "constants.h"
 
