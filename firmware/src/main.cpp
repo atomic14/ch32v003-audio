@@ -4,7 +4,8 @@
 #include "constants.h"
 #include "music.h"
 #include "soundEffects.h"
-
+// #include "music/munsters_lead.h"
+#include "music/bond.h"
 
 extern "C" void EXTI7_0_IRQHandler(void)
     __attribute__((interrupt("WCH-Interrupt-fast")));
@@ -22,17 +23,38 @@ int main(void) {
 #endif
   HAL::setup();
 
-  // delay in case we are
+  // CRITICAL: Delay at startup to allow programmer to connect
+  // Without this, chip enters STANDBY too quickly to be programmed
+  // Comment out for production to save power
   HAL::Delay_Ms(2000);
 
-  while (1) {
-    // clear EXTI1 pending and enter true standby
-    EXTI_ClearITPendingBit(EXTI_Line1);
-    HAL::enter_standby();  
 
-    // after wake: re-init clocks/peripherals you need
-    HAL::setup();      
-    play_music(7000000); // your existing bit-banged audio
+  while (1) {
+    // Check if we were woken up by the trigger pin being high
+    // (This happens after waking from standby via EXTI)
+    if (HAL::digialRead(TRIGGER_GPIO_PORT, TRIGGER_GPIO_PIN)) {
+      // Debounce
+      HAL::Delay_Ms(10);
+      
+      // Still high? Play the music
+      if (HAL::digialRead(TRIGGER_GPIO_PORT, TRIGGER_GPIO_PIN)) {
+        play_music(bond, BOND_LENGTH, 13000000, 4);
+        
+        // Wait for trigger to go low before sleeping
+        // This prevents immediately waking up again
+        while (HAL::digialRead(TRIGGER_GPIO_PORT, TRIGGER_GPIO_PIN)) {
+          HAL::Delay_Ms(10);
+        }
+        
+        // Extra delay to ensure trigger is stable low
+        HAL::Delay_Ms(50);
+      }
+    }
+
+    // Enter ultra-low power standby mode (~2-5µA)
+    // When PC1 goes high (EXTI1), chip resets and restarts from main()
+    HAL::enter_standby(); 
+    HAL::setup();
   }
 }
 

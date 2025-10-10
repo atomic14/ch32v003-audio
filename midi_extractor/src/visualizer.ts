@@ -7,6 +7,13 @@ export interface VisualizerOptions {
   clickable?: boolean;
 }
 
+interface ResolvedVisualizerOptions {
+  compact: boolean;
+  height: number;
+  showLabels: boolean;
+  clickable: boolean;
+}
+
 export class MidiVisualizer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -14,7 +21,7 @@ export class MidiVisualizer {
   private currentTime: number = 0;
   private duration: number = 0;
   private onSeek: ((time: number) => void) | null = null;
-  private options: VisualizerOptions;
+  private options: ResolvedVisualizerOptions;
 
   constructor(canvas: HTMLCanvasElement, options: VisualizerOptions = {}) {
     this.canvas = canvas;

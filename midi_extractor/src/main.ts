@@ -1,14 +1,17 @@
 import './style.css';
-import { parseMidiFile, trackToBuzzerC, getTrackNotes } from './midiConverter';
-import type { ParsedMidi } from './midiConverter';
+import { parseMidiFile, processTracksForExport, generateCodeFromProcessedTracks, getTrackNotes } from './midiConverter';
+import type { ParsedMidi, GeneratedCode, ProcessedTrack } from './midiConverter';
 import { MidiVisualizer } from './visualizer';
 import { MidiPlayer } from './player';
 
 let currentMidi: ParsedMidi | null = null;
-let selectedTrackIndex: number | null = null;
 let trackPlayers: Map<number, MidiPlayer> = new Map();
 let trackVisualizers: Map<number, MidiVisualizer> = new Map();
 let showEmptyTracks: boolean = false;
+let generatedCode: GeneratedCode | null = null;
+let processedTracks: ProcessedTrack[] = [];
+let selectedTrackIndices: Set<number> = new Set();
+let currentBaseName: string = 'midi_export';
 
 function initializeApp() {
   const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -47,31 +50,51 @@ function initializeApp() {
         <div class="file-info" id="file-info"></div>
         
         <div class="tracks-section">
-          <h2>Select a Track to Export</h2>
+          <h2>Select Tracks to Export</h2>
+          <p class="section-hint">Select one or more tracks. Polyphonic tracks will be automatically split into multiple streams.</p>
           <div class="tracks-list" id="tracks-list"></div>
         </div>
 
         <div class="export-section hidden" id="export-section">
-          <h2>Export C Code</h2>
+          <h2>Export C/C++ Code</h2>
+          <div class="stream-preview" id="stream-preview"></div>
           <div class="export-controls">
-            <button id="export-btn" class="btn btn-success">
+            <button id="export-header-btn" class="btn btn-success">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                 <polyline points="7 10 12 15 17 10"></polyline>
                 <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Download C Code
+              Download Header (.h)
             </button>
-            <button id="copy-btn" class="btn btn-secondary">
+            <button id="export-impl-btn" class="btn btn-success">
               <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
               </svg>
-              Copy to Clipboard
+              Download Implementation (.cpp)
+            </button>
+            <button id="export-both-btn" class="btn btn-primary">
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+              Download Both Files
             </button>
           </div>
-          <div class="code-preview">
-            <pre id="code-output"></pre>
+          <div class="code-tabs">
+            <button class="code-tab active" data-tab="header">Header File (.h)</button>
+            <button class="code-tab" data-tab="impl">Implementation (.cpp)</button>
+          </div>
+          <div class="code-preview-container">
+            <div class="code-preview active" id="code-preview-header">
+              <pre id="code-output-header"></pre>
+            </div>
+            <div class="code-preview" id="code-preview-impl">
+              <pre id="code-output-impl"></pre>
+            </div>
           </div>
         </div>
 
@@ -92,8 +115,9 @@ function initializeApp() {
 function setupEventListeners() {
   const dropZone = document.getElementById('drop-zone')!;
   const fileInput = document.getElementById('file-input') as HTMLInputElement;
-  const exportBtn = document.getElementById('export-btn')!;
-  const copyBtn = document.getElementById('copy-btn')!;
+  const exportHeaderBtn = document.getElementById('export-header-btn')!;
+  const exportImplBtn = document.getElementById('export-impl-btn')!;
+  const exportBothBtn = document.getElementById('export-both-btn')!;
   const resetBtn = document.getElementById('reset-btn')!;
 
   // File upload
@@ -121,9 +145,26 @@ function setupEventListeners() {
   });
 
   // Export controls
-  exportBtn.addEventListener('click', exportCode);
-  copyBtn.addEventListener('click', copyCode);
+  exportHeaderBtn.addEventListener('click', () => exportCode('header'));
+  exportImplBtn.addEventListener('click', () => exportCode('impl'));
+  exportBothBtn.addEventListener('click', () => exportCode('both'));
   resetBtn.addEventListener('click', reset);
+
+  // Code tabs
+  document.querySelectorAll('.code-tab').forEach(tab => {
+    tab.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      const tabName = target.dataset.tab;
+      
+      // Update active tab
+      document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+      target.classList.add('active');
+      
+      // Show corresponding preview
+      document.querySelectorAll('.code-preview').forEach(p => p.classList.remove('active'));
+      document.getElementById(`code-preview-${tabName}`)!.classList.add('active');
+    });
+  });
 }
 
 async function handleFile(file: File) {
@@ -190,11 +231,13 @@ function displayTracks(midi: ParsedMidi) {
     trackCard.innerHTML = `
       <div class="track-content">
         <div class="track-header">
-          <div class="track-info">
-            <div class="track-name">${track.name}</div>
-            <div class="track-details">Track ${track.index + 1} • ${track.noteCount} notes</div>
+          <div class="track-checkbox">
+            <input type="checkbox" id="track-checkbox-${track.index}" class="track-checkbox-input" data-track="${track.index}">
+            <label for="track-checkbox-${track.index}" class="track-checkbox-label">
+              <div class="track-name">${track.name}</div>
+              <div class="track-details">Track ${track.index + 1} • ${track.noteCount} notes</div>
+            </label>
           </div>
-          <button class="btn btn-small select-btn" data-track="${track.index}">Select</button>
         </div>
         <div class="track-preview-container">
           <canvas class="track-preview-canvas" id="track-canvas-${track.index}"></canvas>
@@ -216,8 +259,8 @@ function displayTracks(midi: ParsedMidi) {
       </div>
     `;
 
-    const selectBtn = trackCard.querySelector('.select-btn')!;
-    selectBtn.addEventListener('click', () => selectTrack(track.index));
+    const checkbox = trackCard.querySelector('.track-checkbox-input') as HTMLInputElement;
+    checkbox.addEventListener('change', () => updateTrackSelection());
 
     const playBtn = trackCard.querySelector('.play-track-btn')!;
     const stopBtn = trackCard.querySelector('.stop-track-btn')!;
@@ -248,23 +291,46 @@ function displayTracks(midi: ParsedMidi) {
   });
 }
 
-function selectTrack(index: number) {
+function updateTrackSelection() {
   if (!currentMidi) return;
 
-  selectedTrackIndex = index;
+  // Get all checked tracks
+  selectedTrackIndices.clear();
+  document.querySelectorAll('.track-checkbox-input:checked').forEach((checkbox) => {
+    const trackIndex = parseInt((checkbox as HTMLInputElement).getAttribute('data-track') || '-1');
+    if (trackIndex >= 0) {
+      selectedTrackIndices.add(trackIndex);
+    }
+  });
 
-  // Update track selection UI
-  document.querySelectorAll('.track-card').forEach((card, i) => {
-    if (i === index) {
+  // Update card styling
+  document.querySelectorAll('.track-card').forEach((card) => {
+    const checkbox = card.querySelector('.track-checkbox-input') as HTMLInputElement;
+    if (checkbox?.checked) {
       card.classList.add('selected');
     } else {
       card.classList.remove('selected');
     }
   });
 
-  // Generate and display C code
-  const cCode = trackToBuzzerC(currentMidi.midi, index);
-  document.getElementById('code-output')!.textContent = cCode;
+  if (selectedTrackIndices.size === 0) {
+    // Hide export section if no tracks selected
+    document.getElementById('export-section')!.classList.add('hidden');
+    return;
+  }
+
+  // Process selected tracks
+  processedTracks = processTracksForExport(currentMidi.midi, Array.from(selectedTrackIndices));
+  
+  // Generate code
+  generatedCode = generateCodeFromProcessedTracks(processedTracks, currentBaseName);
+  
+  // Update preview
+  updateStreamPreview();
+  
+  // Update code displays
+  document.getElementById('code-output-header')!.textContent = generatedCode.header;
+  document.getElementById('code-output-impl')!.textContent = generatedCode.implementation;
 
   // Show export section
   document.getElementById('export-section')!.classList.remove('hidden');
@@ -273,48 +339,75 @@ function selectTrack(index: number) {
   document.getElementById('export-section')!.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-function exportCode() {
-  const code = document.getElementById('code-output')!.textContent;
-  if (!code || !currentMidi) return;
+function updateStreamPreview() {
+  const previewDiv = document.getElementById('stream-preview')!;
+  
+  if (processedTracks.length === 0) {
+    previewDiv.innerHTML = '';
+    return;
+  }
 
-  const track = currentMidi.tracks[selectedTrackIndex!];
-  const filename = `${track.name.replace(/[^a-z0-9]/gi, '_')}_buzzer.c`;
+  let totalStreams = 0;
+  const streamInfo: string[] = [];
+  
+  for (const track of processedTracks) {
+    totalStreams += track.streams.length;
+    
+    if (track.streams.length === 1) {
+      streamInfo.push(`<li><strong>${track.trackName}</strong>: <code>${track.streams[0].name}</code> (${track.streams[0].commands.length} notes)</li>`);
+    } else {
+      streamInfo.push(`<li><strong>${track.trackName}</strong> (polyphonic, split into ${track.streams.length} streams):`);
+      streamInfo.push('<ul class="stream-sublist">');
+      for (const stream of track.streams) {
+        streamInfo.push(`<li><code>${stream.name}</code> (${stream.commands.length} notes)</li>`);
+      }
+      streamInfo.push('</ul></li>');
+    }
+  }
 
-  const blob = new Blob([code], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+  previewDiv.innerHTML = `
+    <div class="stream-preview-content">
+      <h3>Generated Arrays (${totalStreams} total)</h3>
+      <ul class="stream-list">
+        ${streamInfo.join('')}
+      </ul>
+    </div>
+  `;
 }
 
-async function copyCode() {
-  const code = document.getElementById('code-output')!.textContent;
-  if (!code) return;
+function exportCode(type: 'header' | 'impl' | 'both') {
+  if (!generatedCode || !currentMidi) return;
 
-  try {
-    await navigator.clipboard.writeText(code);
-    const copyBtn = document.getElementById('copy-btn')!;
-    const originalHTML = copyBtn.innerHTML;
-    copyBtn.innerHTML = `
-      <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-      Copied!
-    `;
+  const downloadFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (type === 'header') {
+    downloadFile(generatedCode.header, `${currentBaseName}.h`);
+  } else if (type === 'impl') {
+    downloadFile(generatedCode.implementation, `${currentBaseName}.cpp`);
+  } else {
+    // Download both files
+    downloadFile(generatedCode.header, `${currentBaseName}.h`);
     setTimeout(() => {
-      copyBtn.innerHTML = originalHTML;
-    }, 2000);
-  } catch (error) {
-    alert('Failed to copy to clipboard');
+      downloadFile(generatedCode!.implementation, `${currentBaseName}.cpp`);
+    }, 100);
   }
 }
 
 function reset() {
   currentMidi = null;
-  selectedTrackIndex = null;
   showEmptyTracks = false;
+  generatedCode = null;
+  processedTracks = [];
+  selectedTrackIndices.clear();
+  currentBaseName = 'midi_export';
 
   // Stop all track players
   trackPlayers.forEach(player => player.stop());
