@@ -27,18 +27,11 @@ void play_music(const NoteCmd *midi_cmds, int midi_cmds_len, int max_len_us, int
   // Iterate through all note commands
   for (int i = 0; i < midi_cmds_len; i++) {
     NoteCmd n = midi_cmds[i];
-
-    // Wait before playing this note (creates rests/spacing)
-    if (n.delay_us > 0) {
-      // Handle long delays by capping at 500ms chunks
-      // (some microcontroller delay functions have max limits)
-      if (n.delay_us > 500000) {
-        HAL::Delay_Us(500000);
-        total_elapsed += 500000;
-      } else {
-        HAL::Delay_Us(n.delay_us);
-        total_elapsed += n.delay_us;
-      }
+    // 0 period_us indicates a rest
+    if (n.period_us == 0) {
+      HAL::Delay_Us(n.duration_us);
+      total_elapsed += n.duration_us;
+      continue;
     }
 
     // Play the note by toggling the pin at the specified frequency

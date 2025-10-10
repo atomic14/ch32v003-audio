@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <cstddef>
 
-#include "music_defs.h"
+#include "music/music_defs.h"
 
 #define MAX_NUM_VOICES      8  // number of polyphonic voices (tracks) - PUSHING IT!
 
@@ -23,7 +23,6 @@ typedef struct {
     const NoteCmd *seq;      // pointer to NoteCmd array
     int            len;      // number of entries
     int            idx;      // next note index
-    int32_t        delay_left_us; // countdown to next note start
     int32_t        dur_left_us;   // countdown for current note
     int            pitch_shift;   // integer pitch multiplier (>=1)
     uint8_t        voice;    // which voice this track controls (0..NUM_VOICES-1)

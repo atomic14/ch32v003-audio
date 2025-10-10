@@ -1,7 +1,6 @@
 import { Midi } from '@tonejs/midi';
 
 export interface NoteCmd {
-  delay_us: number;
   period_us: number;
   duration_us: number;
 }
@@ -69,6 +68,7 @@ function splitIntoMonophonicStreams(notes: NoteData[]): NoteData[][] {
 
 /**
  * Convert notes to NoteCmd format
+ * Rests are represented as notes with period_us = 0
  */
 function notesToCommands(notes: NoteData[]): NoteCmd[] {
   const commands: NoteCmd[] = [];
@@ -82,8 +82,16 @@ function notesToCommands(notes: NoteData[]): NoteCmd[] {
     const periodUs = Math.max(1, Math.round(1_000_000 / freqHz));
     const delayUs = Math.max(0, startUs - prevEndUs);
 
+    // Insert rest note if there's a gap
+    if (delayUs > 0) {
+      commands.push({
+        period_us: 0,
+        duration_us: delayUs
+      });
+    }
+
+    // Add the actual note
     commands.push({
-      delay_us: delayUs,
       period_us: periodUs,
       duration_us: durUs
     });
@@ -203,12 +211,11 @@ export function generateCodeFromProcessedTracks(
   headerLines.push('');
   headerLines.push('/**');
   headerLines.push(' * MIDI Note Command Structure');
-  headerLines.push(' * - delay_us: microseconds to wait after the previous note finishes');
   headerLines.push(' * - period_us: period of the note frequency in microseconds (1e6 / Hz)');
-  headerLines.push(' * - duration_us: length of the note in microseconds');
+  headerLines.push(' *              Use 0 for rests (silent periods)');
+  headerLines.push(' * - duration_us: length of the note or rest in microseconds');
   headerLines.push(' */');
   headerLines.push('typedef struct {');
-  headerLines.push('    int delay_us;');
   headerLines.push('    int period_us;');
   headerLines.push('    int duration_us;');
   headerLines.push('} NoteCmd;');
@@ -234,7 +241,7 @@ export function generateCodeFromProcessedTracks(
     implLines.push(`const NoteCmd ${stream.name}[${lengthMacro}] = {`);
     
     for (const cmd of stream.commands) {
-      implLines.push(`    { ${cmd.delay_us}, ${cmd.period_us}, ${cmd.duration_us} },`);
+      implLines.push(`    { ${cmd.period_us}, ${cmd.duration_us} },`);
     }
     
     implLines.push('};');

@@ -7,7 +7,7 @@ void HardFault_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 // -------------------------------------------
 #include <stdint.h>
 
-#include "munsters/munsters.h"
+#include "music/munsters/midi_export.h"
 
 #define AUDIO_PWM_GPIO_PORT   GPIOA
 #define AUDIO_PWM_GPIO_PIN    GPIO_Pin_1   // PA1 (Pin 1 on 8-pin package)

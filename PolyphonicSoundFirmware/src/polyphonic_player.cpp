@@ -90,7 +90,6 @@ void PolyphonicPlayer::mixer_reset(void) {
         tracks[i].seq = NULL;
         tracks[i].len = 0;
         tracks[i].idx = 0;
-        tracks[i].delay_left_us = 0;
         tracks[i].dur_left_us = 0;
         tracks[i].pitch_shift = 1;
         tracks[i].voice = (uint8_t)i;
@@ -104,7 +103,6 @@ void PolyphonicPlayer::mixer_bind_track(uint8_t track_idx, const NoteCmd *seq, i
     tracks[track_idx].seq = seq;
     tracks[track_idx].len = len;
     tracks[track_idx].idx = 0;
-    tracks[track_idx].delay_left_us = (len > 0) ? (int32_t)seq[0].delay_us : 0;
     tracks[track_idx].dur_left_us = 0;
     tracks[track_idx].pitch_shift = (pitch_shift <= 0) ? 1 : pitch_shift;
     tracks[track_idx].voice = track_idx;
@@ -171,23 +169,19 @@ void PolyphonicPlayer::play(uint32_t play_time_us) {
                     v->amp = 0;
                 }
             } else {
+                // Voice is not active, check if we have more notes to play
                 if(trk->idx < trk->len) {
-                    if(trk->delay_left_us > 0) {
-                        trk->delay_left_us -= SAMPLE_PERIOD_US;
-                    } else {
-                        NoteCmd n = trk->seq[trk->idx++];
-                        // Apply pitch shift: divide period to increase frequency
-                        uint32_t adj_period = (trk->pitch_shift > 1) ? (n.period_us / (uint32_t)trk->pitch_shift) : n.period_us;
-                        uint32_t inc = period_us_to_phase_inc(adj_period);
-                        v->phase = 0;
-                        v->phase_inc = inc;
-                        v->amp = VOICE_LEVEL;
-                        v->active = (inc != 0);
-                        trk->dur_left_us = n.duration_us;
-                        if(trk->idx < trk->len) {
-                            trk->delay_left_us = trk->seq[trk->idx].delay_us;
-                        }
-                    }
+                    NoteCmd n = trk->seq[trk->idx++];
+                    // Apply pitch shift: divide period to increase frequency (but not for rests)
+                    uint32_t adj_period = (n.period_us > 0 && trk->pitch_shift > 1)
+                        ? (n.period_us / (uint32_t)trk->pitch_shift)
+                        : n.period_us;
+                    uint32_t inc = period_us_to_phase_inc(adj_period);
+                    v->phase = 0;
+                    v->phase_inc = inc;
+                    v->amp = (inc != 0) ? VOICE_LEVEL : 0;  // Rest if period = 0
+                    v->active = (inc != 0);
+                    trk->dur_left_us = n.duration_us;
                 } else {
                     trk->armed = 0;
                 }
