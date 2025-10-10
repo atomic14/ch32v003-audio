@@ -1,8 +1,11 @@
 #pragma once
-
+#include <ch32v00x.h>
 #include <stdint.h>
+#include <cstddef>
 
-#define MAX_NUM_VOICES      8          // number of polyphonic voices (tracks) - PUSHING IT!
+#include "music_defs.h"
+
+#define MAX_NUM_VOICES      8  // number of polyphonic voices (tracks) - PUSHING IT!
 
 // ---------------------------------------------------
 // Internal voice/track state for the software mixer
@@ -29,18 +32,24 @@ typedef struct {
 
 class PolyphonicPlayer {
 private:
-    Voice g_voices[MAX_NUM_VOICES];
-    Track g_tracks[MAX_NUM_VOICES];
+    Voice voices[MAX_NUM_VOICES];
+    Track tracks[MAX_NUM_VOICES];
+
     TIM_TypeDef *timer;
     int pwm_channel;
     GPIO_TypeDef *pwm_gpio_port;
     int pwm_gpio_pin;
+
+    void audio_pwm_init();
+
 public:
     PolyphonicPlayer(TIM_TypeDef *timer, int pwm_channel, GPIO_TypeDef *pwm_gpio_port, int pwm_gpio_pin);
     // reset to default state
-    void mixer_reset(void);
+    void mixer_reset();
     // Bind a NoteCmd sequence to a track/voice. pitch_shift >= 1
     void mixer_bind_track(uint8_t track_idx, const NoteCmd *seq, int len, int pitch_shift);
     // Stop all voices immediately
     void mixer_all_off(void);
+    // play the music - this is a blocking call that will play for the given number of microseconds
+    void play(uint32_t play_time_us);
 };
