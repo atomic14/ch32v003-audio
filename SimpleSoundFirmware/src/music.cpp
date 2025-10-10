@@ -7,20 +7,7 @@
  *
  * @param max_len_us Maximum playback time in microseconds (used to limit
  * playback duration)
- *
- * How it works:
- * 1. For each note command in the array:
- *    a) Wait for 'delay_us' microseconds (this creates silence/rests between
- * notes) b) Toggle the GPIO pin at the frequency specified by 'period_us' c)
- * Continue toggling for 'duration_us' microseconds
- *
- * The frequency of the note is determined by period_us:
- *   Frequency (Hz) = 1,000,000 / period_us
- *   For example: period_us = 1000 → 1000 Hz (close to B5)
- *
- * The GPIO pin is toggled (HIGH → LOW → HIGH) at half the period to create
- * a square wave that drives the piezo buzzer.
- */
+*/
 void play_music(const NoteCmd *midi_cmds, int midi_cmds_len, int max_len_us, int pitch_shift) {
   int total_elapsed = 0;
 

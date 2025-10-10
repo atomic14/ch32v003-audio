@@ -31,8 +31,7 @@ Firmware for the CH32V003J4M6 microcontroller that plays "The Munsters" theme so
 4. Returns to waiting state for the next trigger
 
 The music data is stored as an array of `NoteCmd` structures, each containing:
-- `delay_us`: Delay before playing this note (microseconds)
-- `period_us`: Period of the note's waveform (determines pitch)
+- `period_us`: Period of the note's waveform (determines pitch) - 0 indicates a rest
 - `duration_us`: How long to play the note (microseconds)
 
 ## Building

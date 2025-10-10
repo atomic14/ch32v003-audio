@@ -50,15 +50,13 @@ Music is defined as sequences of `NoteCmd` structures:
 
 ```cpp
 typedef struct {
-    uint32_t delay_us;      // Delay before this note starts
     uint32_t period_us;     // Period in microseconds (0 = rest)
     uint32_t duration_us;   // How long to hold the note
 } NoteCmd;
 ```
 
 Each note specifies:
-- **delay_us**: Time to wait before playing this note (from the previous note)
-- **period_us**: The period of the note (inverse of frequency). For example, 440Hz A note = 2273μs period
+- **period_us**: The period of the note (inverse of frequency). For example, 440Hz A note = 2273μs period - 0 indicates a rest
 - **duration_us**: How long the note should sound
 
 #### 2. Voice Generation
@@ -217,11 +215,11 @@ Define note sequences as arrays of `NoteCmd`:
 
 ```cpp
 const NoteCmd my_melody[] = {
-    // delay_us, period_us, duration_us
-    {0,      2273,  500000},  // A4 (440Hz) for 500ms, no delay
-    {500000, 2025,  500000},  // B4 (494Hz) for 500ms, 500ms after previous
-    {500000, 1911,  500000},  // C5 (523Hz) for 500ms, 500ms after previous
-    {500000, 0,     500000},  // Rest for 500ms
+    // period_us, duration_us
+    {2273,  500000},  // A4 (440Hz) for 500ms
+    {2025,  500000},  // B4 (494Hz) for 500ms
+    {1911,  500000},  // C5 (523Hz) for 500ms
+    {0,     500000},  // Rest for 500ms
 };
 ```
 
