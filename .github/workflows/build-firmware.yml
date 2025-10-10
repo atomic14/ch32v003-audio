@@ -4,12 +4,14 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'firmware/**'
+      - 'SimpleSoundFirmware/**'
+      - 'PolyphonicSoundFirmware/**'
       - '.github/workflows/build-firmware.yml'
   pull_request:
     branches: [ main ]
     paths:
-      - 'firmware/**'
+      - 'SimpleSoundFirmware/**'
+      - 'PolyphonicSoundFirmware/**'
       - '.github/workflows/build-firmware.yml'
   workflow_dispatch:
 
@@ -44,15 +46,12 @@ jobs:
     - name: Install CH32V platform
       run: pio pkg install -g -p https://github.com/Community-PIO-CH32V/platform-ch32v.git
     
-    - name: Build firmware
+    - name: Build SimpleSoundFirmware
       run: |
-        cd firmware
+        cd SimpleSoundFirmware
         pio run
     
-    - name: Upload firmware artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: firmware
-        path: firmware/.pio/build/**/*.bin
-        if-no-files-found: warn
-
+    - name: Build PolyphonicSoundFirmware
+      run: |
+        cd PolyphonicSoundFirmware
+        pio run
