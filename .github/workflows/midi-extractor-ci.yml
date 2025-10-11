@@ -1,4 +1,4 @@
-name: Sound Effects CI
+name: Midi Extractor CI
 
 on:
   push:
