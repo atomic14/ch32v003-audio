@@ -1,0 +1,55 @@
+name: Sound Effects CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'midi_extractor/**'
+      - '.github/workflows/midi-extractor-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'midi_extractor/**'
+      - '.github/workflows/midi-extractor-ci.yml'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: midi_extractor
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: midi_extractor/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Type check
+      run: npm run type-check
+    
+    - name: Lint
+      run: npm run lint
+    
+    - name: Format check
+      run: npm run format:check
+    
+    - name: Build
+      run: npm run build
+    
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts
+        path: midi_extractor/dist
+        retention-days: 7
+
