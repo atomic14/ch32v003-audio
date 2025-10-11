@@ -354,11 +354,10 @@ I'll be using these boards in my next project, so stay tuned! The combination of
 ## Resources
 
 All code and schematics are available on GitHub:
-[github.com/atomic14/brain-transplant](https://github.com/atomic14/brain-transplant)
+[github.com/atomic14/ch32v003-music](https://github.com/atomic14/ch32v003-music)
 
 The repository includes:
 - Complete firmware source code
-- MIDI conversion scripts
 - Sound effect generator web app
 - Hardware design files
 - Detailed documentation
