@@ -38,7 +38,7 @@ export class MidiPlayer {
 
     // Resume playing if it was playing before
     if (wasPlaying) {
-      this.play();
+      void this.play();
     }
   }
 

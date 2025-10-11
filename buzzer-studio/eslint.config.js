@@ -20,6 +20,9 @@ export default [
         console: 'readonly',
         AudioContext: 'readonly',
         setTimeout: 'readonly',
+        alert: 'readonly',
+        requestAnimationFrame: 'readonly',
+        cancelAnimationFrame: 'readonly',
       },
     },
     plugins: {
@@ -38,4 +41,3 @@ export default [
     ignores: ['dist', 'node_modules', 'eslint.config.js'],
   },
 ];
-
