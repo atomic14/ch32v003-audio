@@ -1,8 +1,8 @@
 :root {
-  --primary: #2196F3;
-  --primary-dark: #1976D2;
-  --success: #4CAF50;
-  --success-dark: #388E3C;
+  --primary: #2196f3;
+  --primary-dark: #1976d2;
+  --success: #4caf50;
+  --success-dark: #388e3c;
   --bg-dark: #1a1a1a;
   --bg-card: #2a2a2a;
   --bg-hover: #333333;
@@ -19,11 +19,13 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   background: var(--bg-dark);
   color: var(--text);
   line-height: 1.6;
   min-height: 100vh;
+  padding-bottom: 80px;
 }
 
 .container {
@@ -105,6 +107,58 @@ h1 {
   color: var(--primary);
   font-family: 'Courier New', monospace;
   font-size: 0.9em;
+}
+
+/* Footer */
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-top: 2px solid var(--border);
+  padding: 1rem 0;
+  z-index: 1000;
+}
+
+.footer-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: var(--bg-dark);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.3s ease;
+}
+
+.link-button:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+  color: var(--primary);
+}
+
+.link-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 h2 {
@@ -201,7 +255,7 @@ h2 {
   font-size: 0.95rem;
 }
 
-.checkbox-label input[type="checkbox"] {
+.checkbox-label input[type='checkbox'] {
   width: 18px;
   height: 18px;
   cursor: pointer;

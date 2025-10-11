@@ -36,19 +36,19 @@ function midiToFreq(noteNum: number): number {
  */
 function splitIntoMonophonicStreams(notes: NoteData[]): NoteData[][] {
   if (notes.length === 0) return [];
-  
+
   // Sort notes by start time
   const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
-  
+
   const streams: NoteData[][] = [];
-  
+
   for (const note of sortedNotes) {
     // Try to find a stream where this note doesn't overlap
     let placedInStream = false;
     for (const stream of streams) {
       const lastNoteInStream = stream[stream.length - 1];
       const lastNoteEnd = lastNoteInStream.time + lastNoteInStream.duration;
-      
+
       // If this note starts after the last note in the stream ends, we can add it
       if (note.time >= lastNoteEnd) {
         stream.push(note);
@@ -56,13 +56,13 @@ function splitIntoMonophonicStreams(notes: NoteData[]): NoteData[][] {
         break;
       }
     }
-    
+
     // If we couldn't place it in any existing stream, create a new one
     if (!placedInStream) {
       streams.push([note]);
     }
   }
-  
+
   return streams;
 }
 
@@ -86,14 +86,14 @@ function notesToCommands(notes: NoteData[]): NoteCmd[] {
     if (delayUs > 0) {
       commands.push({
         period_us: 0,
-        duration_us: delayUs
+        duration_us: delayUs,
       });
     }
 
     // Add the actual note
     commands.push({
       period_us: periodUs,
-      duration_us: durUs
+      duration_us: durUs,
     });
 
     prevEndUs = startUs + durUs;
@@ -107,11 +107,11 @@ function notesToCommands(notes: NoteData[]): NoteCmd[] {
  */
 export function parseMidiFile(arrayBuffer: ArrayBuffer): ParsedMidi {
   const midi = new Midi(arrayBuffer);
-  
+
   const tracks: TrackInfo[] = midi.tracks.map((track, index) => ({
     index,
     name: track.name || `Track ${index + 1}`,
-    noteCount: track.notes.length
+    noteCount: track.notes.length,
   }));
 
   return { tracks, midi };
@@ -138,49 +138,48 @@ export interface ProcessedTrack {
  */
 export function processTracksForExport(midi: Midi, trackIndices: number[]): ProcessedTrack[] {
   const processed: ProcessedTrack[] = [];
-  
+
   for (const trackIndex of trackIndices) {
     if (trackIndex < 0 || trackIndex >= midi.tracks.length) continue;
-    
+
     const track = midi.tracks[trackIndex];
     const trackName = track.name || `Track ${trackIndex + 1}`;
-    
-    const notes: NoteData[] = track.notes.map(note => ({
+
+    const notes: NoteData[] = track.notes.map((note) => ({
       time: note.time,
       duration: note.duration,
       midi: note.midi,
-      name: note.name
+      name: note.name,
     }));
-    
+
     // Split into monophonic streams
     const noteStreams = splitIntoMonophonicStreams(notes);
-    
+
     const streams: NoteStream[] = noteStreams.map((streamNotes, streamIndex) => {
       const commands = notesToCommands(streamNotes);
-      
+
       // Generate stream name
-      const baseName = trackName
-        .replace(/[^a-z0-9]+/gi, '_')
-        .replace(/^_+|_+$/g, '')
-        .toLowerCase() || `track_${trackIndex + 1}`;
-      
-      const streamName = noteStreams.length > 1 
-        ? `${baseName}_stream_${streamIndex}`
-        : baseName;
-      
+      const baseName =
+        trackName
+          .replace(/[^a-z0-9]+/gi, '_')
+          .replace(/^_+|_+$/g, '')
+          .toLowerCase() || `track_${trackIndex + 1}`;
+
+      const streamName = noteStreams.length > 1 ? `${baseName}_stream_${streamIndex}` : baseName;
+
       return {
         name: streamName,
-        commands
+        commands,
       };
     });
-    
+
     processed.push({
       originalTrackIndex: trackIndex,
       trackName,
-      streams
+      streams,
     });
   }
-  
+
   return processed;
 }
 
@@ -196,14 +195,14 @@ export function generateCodeFromProcessedTracks(
   for (const track of processedTracks) {
     allStreams.push(...track.streams);
   }
-  
+
   if (allStreams.length === 0) {
     throw new Error('No streams to export');
   }
-  
+
   // Generate header guard name
   const guardName = `${baseName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_H`;
-  
+
   // Generate header file
   const headerLines: string[] = [];
   headerLines.push(`#ifndef ${guardName}`);
@@ -220,7 +219,7 @@ export function generateCodeFromProcessedTracks(
   headerLines.push('    int duration_us;');
   headerLines.push('} NoteCmd;');
   headerLines.push('');
-  
+
   // Add length macros and extern declarations for each stream
   for (const stream of allStreams) {
     const lengthMacro = `${stream.name.toUpperCase()}_LENGTH`;
@@ -228,29 +227,29 @@ export function generateCodeFromProcessedTracks(
     headerLines.push(`extern const NoteCmd ${stream.name}[];`);
     headerLines.push('');
   }
-  
+
   headerLines.push(`#endif // ${guardName}`);
-  
+
   // Generate implementation file
   const implLines: string[] = [];
   implLines.push(`#include "${baseName}.h"`);
   implLines.push('');
-  
+
   for (const stream of allStreams) {
     const lengthMacro = `${stream.name.toUpperCase()}_LENGTH`;
     implLines.push(`const NoteCmd ${stream.name}[${lengthMacro}] = {`);
-    
+
     for (const cmd of stream.commands) {
       implLines.push(`    { ${cmd.period_us}, ${cmd.duration_us} },`);
     }
-    
+
     implLines.push('};');
     implLines.push('');
   }
-  
+
   return {
     header: headerLines.join('\n'),
-    implementation: implLines.join('\n')
+    implementation: implLines.join('\n'),
   };
 }
 
@@ -259,18 +258,18 @@ export function generateCodeFromProcessedTracks(
  * @deprecated Use processTracksForExport and generateCodeFromProcessedTracks instead
  */
 export function trackToBuzzerC(
-  midi: Midi, 
-  trackIndex: number, 
+  midi: Midi,
+  trackIndex: number,
   baseName: string = 'midi_buzzer',
   varName: string = 'midi_cmds'
 ): GeneratedCode {
   const processed = processTracksForExport(midi, [trackIndex]);
-  
+
   // If single stream, use the provided varName
   if (processed.length === 1 && processed[0].streams.length === 1) {
     processed[0].streams[0].name = varName;
   }
-  
+
   return generateCodeFromProcessedTracks(processed, baseName);
 }
 
@@ -283,11 +282,10 @@ export function getTrackNotes(midi: Midi, trackIndex: number): NoteData[] {
   }
 
   const track = midi.tracks[trackIndex];
-  return track.notes.map(note => ({
+  return track.notes.map((note) => ({
     time: note.time,
     duration: note.duration,
     midi: note.midi,
-    name: note.name
+    name: note.name,
   }));
 }
-

@@ -1,5 +1,10 @@
 import './style.css';
-import { parseMidiFile, processTracksForExport, generateCodeFromProcessedTracks, getTrackNotes } from './midiConverter';
+import {
+  parseMidiFile,
+  processTracksForExport,
+  generateCodeFromProcessedTracks,
+  getTrackNotes,
+} from './midiConverter';
 import type { ParsedMidi, GeneratedCode, ProcessedTrack } from './midiConverter';
 import { MidiVisualizer } from './visualizer';
 import { MidiPlayer } from './player';
@@ -15,7 +20,7 @@ let currentBaseName: string = 'midi_export';
 
 function initializeApp() {
   const app = document.querySelector<HTMLDivElement>('#app')!;
-  
+
   app.innerHTML = `
     <div class="container">
       <header>
@@ -26,10 +31,11 @@ function initializeApp() {
           <ol class="steps-list">
             <li>📁 Upload a MIDI file (.mid or .midi)</li>
             <li>🎼 Preview and listen to each track</li>
-            <li>✅ Select a track to export</li>
+            <li>✅ Select one or more tracks to export</li>
             <li>💾 Download C code with note frequencies and timing</li>
           </ol>
-          <p class="help-text">The generated C code can be used with Arduino's <code>tone()</code> function or similar buzzer control methods.</p>
+          <p class="help-text">You can play individual tracks by bit-banging a buzzer or using PWM on a GPIO pin.</p>
+          <p class="help-text">For polyphonic (multi-track playback) you will need mix the streams together during playback.</p>
         </div>
       </header>
 
@@ -107,6 +113,23 @@ function initializeApp() {
         </button>
       </div>
     </div>
+    <footer class="footer">
+      <div class="footer-content">
+        <a href="https://youtube.com/@atomic14" target="_blank" rel="noopener noreferrer" class="link-button">
+          <svg class="link-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+          </svg>
+          YouTube Channel
+        </a>
+        <a href="https://www.atomic14.com" target="_blank" rel="noopener noreferrer" class="link-button">
+          <svg class="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+          </svg>
+          Blog
+        </a>
+      </div>
+    </footer>
   `;
 
   setupEventListeners();
@@ -151,17 +174,17 @@ function setupEventListeners() {
   resetBtn.addEventListener('click', reset);
 
   // Code tabs
-  document.querySelectorAll('.code-tab').forEach(tab => {
+  document.querySelectorAll('.code-tab').forEach((tab) => {
     tab.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       const tabName = target.dataset.tab;
-      
+
       // Update active tab
-      document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.code-tab').forEach((t) => t.classList.remove('active'));
       target.classList.add('active');
-      
+
       // Show corresponding preview
-      document.querySelectorAll('.code-preview').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.code-preview').forEach((p) => p.classList.remove('active'));
       document.getElementById(`code-preview-${tabName}`)!.classList.add('active');
     });
   });
@@ -174,7 +197,7 @@ async function handleFile(file: File) {
 
     // Calculate track statistics
     const totalTracks = currentMidi.tracks.length;
-    const tracksWithNotes = currentMidi.tracks.filter(t => t.noteCount > 0).length;
+    const tracksWithNotes = currentMidi.tracks.filter((t) => t.noteCount > 0).length;
     const emptyTracks = totalTracks - tracksWithNotes;
 
     // Update UI
@@ -184,14 +207,18 @@ async function handleFile(file: File) {
           <p><strong>File:</strong> ${file.name}</p>
           <p><strong>Total Tracks:</strong> ${totalTracks} (${tracksWithNotes} with notes${emptyTracks > 0 ? `, ${emptyTracks} empty` : ''})</p>
         </div>
-        ${emptyTracks > 0 ? `
+        ${
+          emptyTracks > 0
+            ? `
           <div class="filter-controls">
             <label class="checkbox-label">
               <input type="checkbox" id="show-empty-tracks" ${showEmptyTracks ? 'checked' : ''} />
               <span>Show tracks with no notes</span>
             </label>
           </div>
-        ` : ''}
+        `
+            : ''
+        }
       </div>
     `;
 
@@ -218,10 +245,11 @@ function displayTracks(midi: ParsedMidi) {
   tracksList.innerHTML = '';
 
   // Filter tracks based on showEmptyTracks setting
-  const tracksToShow = midi.tracks.filter(track => showEmptyTracks || track.noteCount > 0);
+  const tracksToShow = midi.tracks.filter((track) => showEmptyTracks || track.noteCount > 0);
 
   if (tracksToShow.length === 0) {
-    tracksList.innerHTML = '<p class="no-tracks-message">No tracks with notes found in this file.</p>';
+    tracksList.innerHTML =
+      '<p class="no-tracks-message">No tracks with notes found in this file.</p>';
     return;
   }
 
@@ -321,13 +349,13 @@ function updateTrackSelection() {
 
   // Process selected tracks
   processedTracks = processTracksForExport(currentMidi.midi, Array.from(selectedTrackIndices));
-  
+
   // Generate code
   generatedCode = generateCodeFromProcessedTracks(processedTracks, currentBaseName);
-  
+
   // Update preview
   updateStreamPreview();
-  
+
   // Update code displays
   document.getElementById('code-output-header')!.textContent = generatedCode.header;
   document.getElementById('code-output-impl')!.textContent = generatedCode.implementation;
@@ -336,12 +364,14 @@ function updateTrackSelection() {
   document.getElementById('export-section')!.classList.remove('hidden');
 
   // Scroll to export section
-  document.getElementById('export-section')!.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  document
+    .getElementById('export-section')!
+    .scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function updateStreamPreview() {
   const previewDiv = document.getElementById('stream-preview')!;
-  
+
   if (processedTracks.length === 0) {
     previewDiv.innerHTML = '';
     return;
@@ -349,14 +379,18 @@ function updateStreamPreview() {
 
   let totalStreams = 0;
   const streamInfo: string[] = [];
-  
+
   for (const track of processedTracks) {
     totalStreams += track.streams.length;
-    
+
     if (track.streams.length === 1) {
-      streamInfo.push(`<li><strong>${track.trackName}</strong>: <code>${track.streams[0].name}</code> (${track.streams[0].commands.length} notes)</li>`);
+      streamInfo.push(
+        `<li><strong>${track.trackName}</strong>: <code>${track.streams[0].name}</code> (${track.streams[0].commands.length} notes)</li>`
+      );
     } else {
-      streamInfo.push(`<li><strong>${track.trackName}</strong> (polyphonic, split into ${track.streams.length} streams):`);
+      streamInfo.push(
+        `<li><strong>${track.trackName}</strong> (polyphonic, split into ${track.streams.length} streams):`
+      );
       streamInfo.push('<ul class="stream-sublist">');
       for (const stream of track.streams) {
         streamInfo.push(`<li><code>${stream.name}</code> (${stream.commands.length} notes)</li>`);
@@ -410,7 +444,7 @@ function reset() {
   currentBaseName = 'midi_export';
 
   // Stop all track players
-  trackPlayers.forEach(player => player.stop());
+  trackPlayers.forEach((player) => player.stop());
   trackPlayers.clear();
   trackVisualizers.clear();
 
@@ -421,7 +455,11 @@ function reset() {
   (document.getElementById('file-input') as HTMLInputElement).value = '';
 }
 
-function toggleTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, stopBtn: HTMLButtonElement) {
+function toggleTrackPlayback(
+  trackIndex: number,
+  playBtn: HTMLButtonElement,
+  stopBtn: HTMLButtonElement
+) {
   if (!currentMidi) return;
 
   // Stop all other track players
@@ -434,20 +472,20 @@ function toggleTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, sto
 
   let trackPlayer = trackPlayers.get(trackIndex);
   const trackViz = trackVisualizers.get(trackIndex);
-  
+
   if (!trackPlayer) {
     // Create new player for this track
     trackPlayer = new MidiPlayer();
     const notes = getTrackNotes(currentMidi.midi, trackIndex);
     trackPlayer.setNotes(notes);
-    
+
     // Connect player to visualizer
     if (trackViz) {
       trackPlayer.setOnTimeUpdate((time) => {
         trackViz.setCurrentTime(time);
       });
     }
-    
+
     trackPlayers.set(trackIndex, trackPlayer);
   }
 
@@ -462,7 +500,11 @@ function toggleTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, sto
   }
 }
 
-function stopTrackPlayback(trackIndex: number, playBtn: HTMLButtonElement, stopBtn: HTMLButtonElement) {
+function stopTrackPlayback(
+  trackIndex: number,
+  playBtn: HTMLButtonElement,
+  stopBtn: HTMLButtonElement
+) {
   const trackPlayer = trackPlayers.get(trackIndex);
   if (trackPlayer) {
     trackPlayer.stop();

@@ -6,7 +6,8 @@ export class MidiPlayer {
   private isPlaying: boolean = false;
   private startTime: number = 0;
   private pausedAt: number = 0;
-  private scheduledNotes: Map<number, { gainNode: GainNode; oscillator: OscillatorNode }> = new Map();
+  private scheduledNotes: Map<number, { gainNode: GainNode; oscillator: OscillatorNode }> =
+    new Map();
   private animationFrameId: number | null = null;
   private onTimeUpdate: ((time: number) => void) | null = null;
 
@@ -21,20 +22,20 @@ export class MidiPlayer {
 
   seek(time: number) {
     const wasPlaying = this.isPlaying;
-    
+
     // Stop current playback
     if (this.isPlaying) {
       this.pause();
     }
-    
+
     // Set the new position
     this.pausedAt = time;
-    
+
     // Update visualization
     if (this.onTimeUpdate) {
       this.onTimeUpdate(time);
     }
-    
+
     // Resume playing if it was playing before
     if (wasPlaying) {
       this.play();
@@ -64,14 +65,14 @@ export class MidiPlayer {
 
     this.isPlaying = false;
     this.pausedAt = this.audioContext ? this.audioContext.currentTime - this.startTime : 0;
-    
+
     // Stop all currently playing notes
     for (const [, { gainNode, oscillator }] of this.scheduledNotes) {
       try {
         gainNode.gain.cancelScheduledValues(this.audioContext!.currentTime);
         gainNode.gain.setValueAtTime(0, this.audioContext!.currentTime);
         oscillator.stop(this.audioContext!.currentTime);
-      } catch (e) {
+      } catch {
         // Ignore errors from already stopped oscillators
       }
     }
@@ -87,14 +88,14 @@ export class MidiPlayer {
     // Stop playback if playing
     if (this.isPlaying) {
       this.isPlaying = false;
-      
+
       // Stop all currently playing notes
       for (const [, { gainNode, oscillator }] of this.scheduledNotes) {
         try {
           gainNode.gain.cancelScheduledValues(this.audioContext!.currentTime);
           gainNode.gain.setValueAtTime(0, this.audioContext!.currentTime);
           oscillator.stop(this.audioContext!.currentTime);
-        } catch (e) {
+        } catch {
           // Ignore errors from already stopped oscillators
         }
       }
@@ -105,10 +106,10 @@ export class MidiPlayer {
         this.animationFrameId = null;
       }
     }
-    
+
     // Always reset position to beginning
     this.pausedAt = 0;
-    
+
     // Update visualization
     if (this.onTimeUpdate) {
       this.onTimeUpdate(0);
@@ -127,18 +128,18 @@ export class MidiPlayer {
       // Only schedule notes that haven't finished yet
       if (noteEndTime > currentTime) {
         const frequency = 440 * Math.pow(2, (note.midi - 69) / 12);
-        
+
         const oscillator = this.audioContext.createOscillator();
         const gainNode = this.audioContext.createGain();
 
         oscillator.type = 'square'; // Buzzer-like sound
         oscillator.frequency.setValueAtTime(frequency, noteStartTime);
-        
+
         // Envelope: quick attack and release
         const attackTime = 0.01;
         const releaseTime = 0.05;
         const startActual = Math.max(noteStartTime, currentTime);
-        
+
         gainNode.gain.setValueAtTime(0, startActual);
         gainNode.gain.linearRampToValueAtTime(0.1, startActual + attackTime);
         gainNode.gain.setValueAtTime(0.1, noteEndTime - releaseTime);
@@ -164,7 +165,7 @@ export class MidiPlayer {
     if (!this.isPlaying || !this.audioContext) return;
 
     const currentTime = this.audioContext.currentTime - this.startTime;
-    const duration = Math.max(...this.notes.map(n => n.time + n.duration), 0);
+    const duration = Math.max(...this.notes.map((n) => n.time + n.duration), 0);
 
     if (currentTime >= duration) {
       this.stop();
@@ -182,4 +183,3 @@ export class MidiPlayer {
     return this.isPlaying;
   }
 }
-
