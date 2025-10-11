@@ -11,24 +11,24 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </header>
 
     <nav class="tab-nav">
-      <button class="tab-button active" data-tab="sound-effects">
-        <span class="tab-icon">🔊</span>
-        <span class="tab-label">Sound Effects</span>
-      </button>
-      <button class="tab-button" data-tab="midi-extractor">
+      <button class="tab-button active" data-tab="midi-extractor">
         <span class="tab-icon">🎵</span>
         <span class="tab-label">MIDI Converter</span>
+      </button>
+      <button class="tab-button" data-tab="sound-effects">
+        <span class="tab-icon">🔊</span>
+        <span class="tab-label">Sound Effects</span>
       </button>
     </nav>
 
     <main class="tab-content">
-      <div id="sound-effects" class="tab-pane active"></div>
-      <div id="midi-extractor" class="tab-pane"></div>
+      <div id="midi-extractor" class="tab-pane active"></div>
+      <div id="sound-effects" class="tab-pane"></div>
     </main>
 
     <footer class="app-footer">
       <div class="footer-links">
-        <a href="https://youtube.com/@atomic14" target="_blank" rel="noopener noreferrer">YouTube</a>
+        <a href="https://github.com/atomic14/ch32v003-music" target="_blank" rel="noopener noreferrer">YouTube</a>
         <span class="separator">•</span>
         <a href="https://www.atomic14.com" target="_blank" rel="noopener noreferrer">Blog</a>
         <span class="separator">•</span>

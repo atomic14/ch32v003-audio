@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="50" cy="50" r="48" fill="#0f172a" stroke="url(#grad)" stroke-width="4"/>
+
+  <!-- Musical note design - larger and more centered -->
+  <path d="M 30 70 L 30 25 L 70 18 L 70 63"
+        fill="none"
+        stroke="url(#grad)"
+        stroke-width="6"
+        stroke-linecap="round"/>
+
+  <!-- Note heads - larger -->
+  <ellipse cx="30" cy="70" rx="10" ry="8" fill="url(#grad)"/>
+  <ellipse cx="70" cy="63" rx="10" ry="8" fill="url(#grad)"/>
+
+  <!-- Sound waves - larger and more visible -->
+  <path d="M 82 30 Q 90 30 90 38"
+        fill="none"
+        stroke="#10b981"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        opacity="0.9"/>
+  <path d="M 82 40 Q 90 40 90 48"
+        fill="none"
+        stroke="#10b981"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        opacity="0.9"/>
+  <path d="M 82 50 Q 90 50 90 58"
+        fill="none"
+        stroke="#10b981"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        opacity="0.9"/>
+</svg>
