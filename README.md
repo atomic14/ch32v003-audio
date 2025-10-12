@@ -4,7 +4,7 @@
 
 # CH32V003J4M6 Music
 
-A hardware project that plays music through a piezo buzzer using a CH32V003J4M6 RISC-V microcontroller. The project includes tools to convert MIDI files and design custom sound effects, with exports optimized for embedded systems.
+A hardware project that plays music through a piezo buzzer using a CH32V003J4M6 RISC-V microcontroller. The project includes tools to convert MIDI files and design custom sound effects, with exports optimized for embedded systems. Click on the image to watch a video and here the results.
 
 [![$0.10 Music Machine](https://img.youtube.com/vi/RiiS4jjG6ME/0.jpg)](https://www.youtube.com/watch?v=RiiS4jjG6ME)
 
