@@ -180,7 +180,7 @@ void PolyphonicPlayer::play(uint32_t play_time_us) {
                     v->phase = 0;
                     v->phase_inc = inc;
                     v->amp = (inc != 0) ? VOICE_LEVEL : 0;  // Rest if period = 0
-                    v->active = (inc != 0);
+                    v->active = 1;  // Keep active for both notes and rests to count down duration
                     trk->dur_left_us = n.duration_us;
                 } else {
                     trk->armed = 0;

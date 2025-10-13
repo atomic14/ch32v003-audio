@@ -7,7 +7,8 @@ void HardFault_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 // -------------------------------------------
 #include <stdint.h>
 
-#include "music/munsters/midi_export.h"
+// #include "music/munsters/midi_export.h"
+#include "music/bond/midi_export.h"
 
 #define AUDIO_PWM_GPIO_PORT   GPIOA
 #define AUDIO_PWM_GPIO_PIN    GPIO_Pin_1   // PA1 (Pin 1 on 8-pin package)
@@ -38,8 +39,18 @@ int main(void)
     polyphonic_player.mixer_bind_track(5, tubular_bells_stream_1, TUBULAR_BELLS_STREAM_1_LENGTH, 2);
     polyphonic_player.mixer_bind_track(6, tubular_bells_stream_2, TUBULAR_BELLS_STREAM_2_LENGTH, 2);
     polyphonic_player.mixer_bind_track(7, tubular_bells_stream_3, TUBULAR_BELLS_STREAM_3_LENGTH, 2);
-    // play for 10 seconds
-    polyphonic_player.play(10000000);
+
+	// polyphonic_player.mixer_bind_track(0, track_3, TRACK_3_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(1, track_5_stream_0, TRACK_5_STREAM_0_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(2, track_5_stream_1, TRACK_5_STREAM_1_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(3, track_5_stream_2, TRACK_5_STREAM_2_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(4, track_5_stream_3, TRACK_5_STREAM_3_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(0, track_7, TRACK_7_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(6, track_19, TRACK_19_LENGTH, 6);
+	// polyphonic_player.mixer_bind_track(7, track_33_stream_0, TRACK_33_STREAM_0_LENGTH, 6);
+
+	// play for 10 seconds
+    polyphonic_player.play(100000000);
 }
 
 void NMI_Handler(void) {}
