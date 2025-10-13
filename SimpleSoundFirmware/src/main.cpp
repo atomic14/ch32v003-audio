@@ -37,7 +37,7 @@ int main(void) {
       
       // Still high? Play the music
       if (HAL::digialRead(TRIGGER_GPIO_PORT, TRIGGER_GPIO_PIN)) {
-        play_music(track_10_stream_0, TRACK_10_STREAM_0_LENGTH, 13000000, 4);
+        play_music(leadline_stream_0, LEADLINE_STREAM_0_LENGTH, 100000000, 2);
         
         // Wait for trigger to go low before sleeping
         // This prevents immediately waking up again

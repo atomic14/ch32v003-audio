@@ -16,8 +16,9 @@ void play_music(const NoteCmd *midi_cmds, int midi_cmds_len, int max_len_us, int
     NoteCmd n = midi_cmds[i];
     // 0 period_us indicates a rest
     if (n.period_us == 0) {
-      HAL::Delay_Us(n.duration_us);
-      total_elapsed += n.duration_us;
+      int rest_duration = n.duration_us / pitch_shift;
+      HAL::Delay_Us(rest_duration);
+      total_elapsed += rest_duration;
       continue;
     }
 

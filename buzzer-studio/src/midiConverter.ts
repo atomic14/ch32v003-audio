@@ -33,24 +33,38 @@ function midiToFreq(noteNum: number): number {
 
 /**
  * Split a track's notes into monophonic streams (no overlapping notes per stream)
+ * Notes with small overlaps will have their duration adjusted rather than being split into separate streams
+ * @param overlapToleranceMs - Maximum overlap in milliseconds to tolerate (default: 50ms)
  */
-function splitIntoMonophonicStreams(notes: NoteData[]): NoteData[][] {
+function splitIntoMonophonicStreams(notes: NoteData[], overlapToleranceMs: number = 50): NoteData[][] {
   if (notes.length === 0) return [];
 
   // Sort notes by start time
   const sortedNotes = [...notes].sort((a, b) => a.time - b.time);
 
   const streams: NoteData[][] = [];
+  const overlapToleranceSec = overlapToleranceMs / 1000;
 
   for (const note of sortedNotes) {
-    // Try to find a stream where this note doesn't overlap
+    // Try to find a stream where this note doesn't overlap (or overlaps within tolerance)
     let placedInStream = false;
     for (const stream of streams) {
       const lastNoteInStream = stream[stream.length - 1];
       const lastNoteEnd = lastNoteInStream.time + lastNoteInStream.duration;
 
-      // If this note starts after the last note in the stream ends, we can add it
+      // Calculate overlap
+      const overlap = lastNoteEnd - note.time;
+
+      // If this note starts after the last note ends, we can add it
       if (note.time >= lastNoteEnd) {
+        stream.push(note);
+        placedInStream = true;
+        break;
+      }
+      // If overlap is within tolerance, adjust the previous note's duration and add this one
+      else if (overlap > 0 && overlap <= overlapToleranceSec) {
+        // Shorten the previous note so it ends when this note starts
+        lastNoteInStream.duration = note.time - lastNoteInStream.time;
         stream.push(note);
         placedInStream = true;
         break;
