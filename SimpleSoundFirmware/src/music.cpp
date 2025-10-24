@@ -29,11 +29,11 @@ void play_music(const NoteCmd *midi_cmds, int midi_cmds_len, int max_len_us, int
       HAL::digitalWrite(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN,
                         BitAction::Bit_SET); // Turn on the buzzer
       // Delay_Us(20);
-      HAL::Delay_Us(period_us/10); // Wait for half the period
+      HAL::Delay_Us(period_us/2); // Wait for half the period
       HAL::digitalWrite(BUZZER_GPIO_PORT, BUZZER_GPIO_PIN,
                         BitAction::Bit_RESET); // Turn off the buzzer
       // Delay_Us(n.period_us - 20);    // Wait for the other half
-      HAL::Delay_Us(period_us - period_us/10); // Wait for half the period
+      HAL::Delay_Us(period_us - period_us/2); // Wait for half the period
       elapsed += period_us;    // Track how long we've been playing
     }
 

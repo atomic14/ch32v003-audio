@@ -2,44 +2,67 @@
 [![Buzzer Studio CI](https://github.com/atomic14/ch32v003-music/actions/workflows/buzzer-studio-ci.yml/badge.svg)](https://github.com/atomic14/ch32v003-music/actions/workflows/buzzer-studio-ci.yml)
 
 
-# CH32V003J4M6 Music
+# CH32V003J4M6 Audio Projects
 
-A hardware project that plays music through a piezo buzzer using a CH32V003J4M6 RISC-V microcontroller. The project includes tools to convert MIDI files and design custom sound effects, with exports optimized for embedded systems. Click on the image to watch a video and here the results.
+A collection of audio projects for the CH32V003J4M6 RISC-V microcontroller, demonstrating various audio synthesis and playback techniques on an 8-pin, $0.10 microcontroller. From simple 1-bit music to compressed audio sample playback and speech synthesis. Click on the image to watch a video and hear the results.
 
 [![$0.10 Music Machine](https://img.youtube.com/vi/RiiS4jjG6ME/0.jpg)](https://www.youtube.com/watch?v=RiiS4jjG6ME)
 
 ## Project Overview
 
-This project consists of four main components:
+This repository contains several firmware projects and development tools:
 
-1. **SimpleSoundFirmware** - Single-voice embedded firmware for basic monophonic playback
-2. **PolyphonicSoundFirmware** - Advanced 8-voice polyphonic firmware with PWM audio synthesis
-3. **Buzzer Studio** - Interactive web app for generating and exporting 1-bit sound effects
+### Firmware Projects
+
+1. **SimpleSoundFirmware** - Single-voice 1-bit music playback (monophonic)
+2. **PolyphonicSoundFirmware** - Advanced 8-voice polyphonic music with PWM synthesis
+3. **SamplePlayback** - Compressed audio sample playback (IMA ADPCM, QOA, 2-bit ADPCM)
+4. **Talkie** - Speech synthesis using the Talkie library
+
+### Development Tools
+
+5. **Buzzer Studio** - Interactive web app for designing 1-bit sound effects and exporting MIDI tracks
+6. **Scripts** - Python tools for audio conversion and ADPCM encoding
 
 ## Quick Start
 
 ### Building the Firmware
 
-Both firmware projects build automatically via GitHub Actions on every push. To build locally:
+All firmware projects build with PlatformIO. To build locally:
 
-**Simple Sound Firmware (monophonic):**
+**Simple Sound Firmware (1-bit monophonic):**
 ```bash
 cd SimpleSoundFirmware
 pio run
 ```
 
-**Polyphonic Sound Firmware (8-voice!):**
+**Polyphonic Sound Firmware (8-voice PWM):**
 ```bash
 cd PolyphonicSoundFirmware
 pio run
 ```
 
-For detailed firmware information, see:
-- [SimpleSoundFirmware/README.md](SimpleSoundFirmware/README.md) - Original single-voice implementation
-- [PolyphonicSoundFirmware/README.md](PolyphonicSoundFirmware/README.md) - Advanced polyphonic implementation
+**Sample Playback (compressed audio):**
+```bash
+cd SamplePlayback
+pio run
+```
+
+**Talkie (speech synthesis):**
+```bash
+cd Talkie
+pio run
+```
+
+For detailed firmware information, see each project's README:
+- [SimpleSoundFirmware/README.md](SimpleSoundFirmware/README.md) - Original single-voice 1-bit music
+- [PolyphonicSoundFirmware/README.md](PolyphonicSoundFirmware/README.md) - 8-voice polyphonic synthesis
+- [SamplePlayback/README.md](SamplePlayback/README.md) - Compressed audio playback with multiple codecs
+- [Talkie/README.md](Talkie/README.md) - Speech synthesis implementation
 
 ### Converting Music Files and Creating Sound Effects
 
+**Buzzer Studio (Web App):**
 ```bash
 cd buzzer-studio
 npm install
@@ -47,55 +70,91 @@ npm run dev
 ```
 
 The app allows you to:
-- Export tracks from a midi file
+- Export tracks from MIDI files for 1-bit playback
 - Design sound effects with real-time preview
 - Export to C arrays for microcontrollers
 - Export to Python for MicroPython/CircuitPython
 - Choose from preset effects (jump, coin, laser, etc.)
+
+**Python Scripts (Audio Conversion):**
+```bash
+cd scripts
+# Convert WAV to IMA ADPCM C array
+uv run wav_to_adpcm_c.py input.wav
+```
+
+See [scripts/README.md](scripts/README.md) for more conversion tools and options.
 
 
 ## Hardware Requirements
 
 - **Microcontroller**: CH32V003J4M6 (RISC-V, 8-pin SOIC)
 - **Power**: 3.3V supply
+- **Programming**: WCH-Link or compatible programmer
 
-**SimpleSoundFirmware (monophonic):**
+### Pin Configurations
+
+**SimpleSoundFirmware (1-bit music):**
 - **Output**: Piezo buzzer or small speaker (connected to PD6)
 - **Input**: Trigger button or signal (connected to PC1)
 
-**PolyphonicSoundFirmware (8-voice):**
+**PolyphonicSoundFirmware (8-voice music):**
 - **Output**: Piezo buzzer or small speaker (connected to PA1)
 - **No trigger input**: Plays automatically on startup
+
+**SamplePlayback (compressed audio):**
+- **Output**: PWM audio output on PA1 (8-bit via PWM)
+- **No trigger input**: Plays automatically on startup
+
+**Talkie (speech synthesis):**
+- **Output**: PWM audio output on PA1 (8-bit via PWM)
+- **No trigger input**: Plays speech on startup
 
 ## Project Structure
 
 ```
 brain-transplant/
-├── SimpleSoundFirmware/   # Original monophonic firmware
-│   ├── src/              # Source code (main.cpp, music data)
-│   ├── include/          # Project headers
-│   ├── lib/              # Project-specific libraries
-│   ├── platformio.ini    # Build configuration
-│   └── README.md         # Simple firmware documentation
+├── SimpleSoundFirmware/      # 1-bit monophonic music playback
+│   ├── src/                  # Source code (main.cpp, music data)
+│   ├── platformio.ini        # Build configuration
+│   └── README.md             # Documentation
 │
-├── PolyphonicSoundFirmware/ # Advanced 8-voice polyphonic firmware
-│   ├── src/              # Source code (main.cpp, polyphonic player)
-│   ├── include/          # Project headers
-│   ├── lib/              # Project-specific libraries
-│   ├── platformio.ini    # Build configuration
-│   └── README.md         # Polyphonic firmware documentation
+├── PolyphonicSoundFirmware/  # 8-voice polyphonic music
+│   ├── src/                  # Source code (polyphonic player)
+│   ├── platformio.ini        # Build configuration
+│   └── README.md             # Documentation
 │
-├── scripts/              # Python conversion tools
-│   ├── midi_to_buzzer_c.py   # MIDI → C converter
-│   ├── pyproject.toml        # Python dependencies
+├── SamplePlayback/           # Compressed audio sample playback
+│   ├── src/                  # Source code (ADPCM decoders, PWM player)
+│   │   ├── AudioStream.h     # Base interface for codecs
+│   │   ├── IMAAdpcmStream.*  # IMA ADPCM decoder
+│   │   ├── ADPCM2BitStream.* # 2-bit ADPCM decoder
+│   │   ├── player.*          # PWM playback engine
+│   │   └── audio/            # Audio data files
+│   ├── platformio.ini        # Build configuration
+│   └── README.md             # Documentation
+│
+├── Talkie/                   # Speech synthesis
+│   ├── src/                  # Source code (Talkie library port)
+│   │   ├── Talkie.*          # Speech synthesis engine
+│   │   ├── phrases.*         # Pre-defined speech phrases
+│   │   └── player.*          # Audio playback
+│   ├── platformio.ini        # Build configuration
+│   └── README.md             # Documentation
+│
+├── scripts/                  # Python audio conversion tools
+│   ├── wav_to_adpcm_c.py     # WAV → ADPCM C array converter
+│   ├── adpcm_2bit_decoder.py # 2-bit ADPCM decoder
+│   ├── compare_audio.py      # Audio comparison tools
+│   ├── pyproject.toml        # Python dependencies (uv)
 │   └── README.md             # Scripts documentation
 │
-├── buzzer-studio/        # Interactive sound effect designer and midi exporter
-│   ├── src/              # TypeScript source code
-│   ├── public/           # Static assets
-│   ├── index.html        # App entry point
-│   ├── package.json      # Dependencies and scripts
-│   └── tsconfig.json     # TypeScript configuration
+├── buzzer-studio/            # Interactive web app
+│   ├── src/                  # TypeScript source code
+│   ├── public/               # Static assets
+│   ├── index.html            # App entry point
+│   ├── package.json          # Dependencies and scripts
+│   └── README.md             # App documentation
 │
 └── .github/
     └── workflows/
@@ -105,9 +164,15 @@ brain-transplant/
 
 ## Documentation
 
-- **[SimpleSoundFirmware Documentation](SimpleSoundFirmware/README.md)** - Original monophonic firmware, hardware setup, and pin configuration
-- **[PolyphonicSoundFirmware Documentation](PolyphonicSoundFirmware/README.md)** - Advanced 8-voice polyphonic synthesis implementation
-- **[Buzzer Studio App](buzzer-studio/)** - Interactive web tool for designing 1-bit sound effects and exporting midi tracks
+### Firmware Projects
+- **[SimpleSoundFirmware](SimpleSoundFirmware/README.md)** - 1-bit monophonic music playback
+- **[PolyphonicSoundFirmware](PolyphonicSoundFirmware/README.md)** - 8-voice polyphonic synthesis
+- **[SamplePlayback](SamplePlayback/README.md)** - Compressed audio playback with multiple codec support
+- **[Talkie](Talkie/README.md)** - Speech synthesis implementation
+
+### Development Tools
+- **[Buzzer Studio](buzzer-studio/)** - Web app for designing 1-bit sound effects and exporting MIDI
+- **[Scripts](scripts/README.md)** - Python tools for audio conversion and ADPCM encoding
 
 ## Development
 
@@ -116,25 +181,40 @@ brain-transplant/
 **For Firmware Development:**
 - [PlatformIO](https://platformio.org/) - Embedded build system
 - CH32V platform support (installed automatically by PlatformIO)
+- WCH-Link programmer (or compatible)
 
 **For Buzzer Studio App:**
 - Node.js 18+ and npm
 - Modern web browser with Web Audio API support
 
+**For Python Scripts:**
+- Python 3.8+
+- [uv](https://github.com/astral-sh/uv) package manager
+
 ## How It Works
 
-### Firmware Playback
+### Firmware Approaches
 
-**SimpleSoundFirmware (monophonic):**
-1. Waits for a trigger signal on pin PC1
-2. Iterates through the music data array
-3. Toggles the output pin (PD6) at the specified frequencies
-4. Uses microsecond-precision delays for accurate timing
-5. Returns to waiting state after playback completes
+**SimpleSoundFirmware (1-bit music):**
+1. Waits for trigger signal on pin PC1
+2. Toggles output pin (PD6) at specified frequencies
+3. Uses microsecond-precision delays for accurate timing
+4. Simple 1-bit audio (square wave)
 
-**PolyphonicSoundFirmware (8-voice):**
-1. Automatically starts playing on power-up
+**PolyphonicSoundFirmware (8-voice music):**
+1. Automatically starts on power-up
 2. Manages up to 8 simultaneous voices using PWM synthesis
-3. Outputs mixed audio through pin PA1 at 8 kHz sample rate
-4. Uses software mixing with real-time voice generation
-5. Supports polyphonic playback with pitch shifting per track
+3. Outputs mixed audio through PA1 at 8 kHz sample rate
+4. Software mixing with real-time voice generation
+
+**SamplePlayback (compressed audio):**
+1. Decodes compressed audio using codec decoders (IMA ADPCM, 2-bit ADPCM)
+2. Outputs 8-bit audio via PWM on PA1 at 8 kHz
+3. Supports multiple codec formats with extensible architecture
+4. Compression ratios of 2:1 and 4:1
+
+**Talkie (speech synthesis):**
+1. Uses Linear Predictive Coding (LPC) for speech synthesis
+2. Pre-defined vocabulary of phonemes and words
+3. Outputs synthesized speech via PWM on PA1
+4. Real-time speech generation from phrase data
