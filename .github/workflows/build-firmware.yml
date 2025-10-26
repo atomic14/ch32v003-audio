@@ -6,12 +6,16 @@ on:
     paths:
       - 'SimpleSoundFirmware/**'
       - 'PolyphonicSoundFirmware/**'
+      - 'Talkie/**'
+      - 'SamplePlayback/**'
       - '.github/workflows/build-firmware.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'SimpleSoundFirmware/**'
       - 'PolyphonicSoundFirmware/**'
+      - 'Talkie/**'
+      - 'SamplePlayback/**'
       - '.github/workflows/build-firmware.yml'
   workflow_dispatch:
 
@@ -54,4 +58,14 @@ jobs:
     - name: Build PolyphonicSoundFirmware
       run: |
         cd PolyphonicSoundFirmware
+        pio run
+
+    - name: Build Talkie
+      run: |
+        cd Talkie
+        pio run
+
+    - name: Build SamplePlayback
+      run: |
+        cd SamplePlayback
         pio run

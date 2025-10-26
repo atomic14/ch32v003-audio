@@ -1563,6 +1563,31 @@ button:active {
   font-style: italic;
 }
 
+.attribution-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.attribution-text {
+  margin: 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.attribution-text a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.attribution-text a:hover {
+  color: var(--secondary);
+  text-decoration: underline;
+}
+
 .encode-controls {
   display: flex;
   gap: 1rem;

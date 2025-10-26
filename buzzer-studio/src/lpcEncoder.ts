@@ -1,5 +1,11 @@
 // LPC Encoder - Converts WAV files to TMS5220/TMS5100 LPC bitstreams
-// Full port of Python Wizard functionality to TypeScript (with fixes)
+//
+// This is a TypeScript port of the LPC encoding algorithms from:
+// - Python Wizard: https://github.com/ptwz/python_wizard
+// - BlueWizard: https://github.com/patrick99e99/BlueWizard
+//
+// The core LPC analysis, Levinson-Durbin recursion, and bitstream encoding
+// are based on these excellent open-source implementations.
 
 import { CodingTable } from './tmsTables';
 

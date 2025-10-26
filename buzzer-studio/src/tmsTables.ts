@@ -1,5 +1,11 @@
 // TMS5220/TMS5100 Coding Tables
-// Port of tables from Python Wizard lpcplayer/tables.py
+//
+// This is a TypeScript port of the coefficient tables from:
+// - Python Wizard: https://github.com/ptwz/python_wizard
+//   (specifically lpcplayer/tables.py)
+//
+// These tables define the quantized energy, pitch, and reflection coefficient
+// values used by the TMS5220 and TMS5100 speech synthesis chips.
 
 export interface TMSCoeffs {
   num_k: number;

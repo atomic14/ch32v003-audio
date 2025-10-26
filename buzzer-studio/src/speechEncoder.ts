@@ -226,6 +226,15 @@ export function initSpeechEncoder(container: HTMLElement): void {
         <textarea id="hex-output" class="hex-output" readonly rows="8"></textarea>
       </div>
 
+      <div class="section attribution-section">
+        <p class="attribution-text">
+          LPC encoding algorithm based on
+          <a href="https://github.com/ptwz/python_wizard" target="_blank" rel="noopener noreferrer">Python Wizard</a>
+          and
+          <a href="https://github.com/patrick99e99/BlueWizard" target="_blank" rel="noopener noreferrer">BlueWizard</a>
+        </p>
+      </div>
+
       <div id="encoder-status" class="status"></div>
     </div>
   `;
