@@ -24,6 +24,9 @@ This repository contains several firmware projects and development tools:
 5. **Buzzer Studio** - Interactive web app for designing 1-bit sound effects and exporting MIDI tracks
 6. **Scripts** - Python tools for audio conversion and ADPCM encoding
 
+
+The **Buzzer Studio** project is available here: https://buzzer-studio.atomic14.com/
+
 ## Quick Start
 
 ### Building the Firmware
