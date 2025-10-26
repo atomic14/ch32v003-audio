@@ -1695,3 +1695,205 @@ button:active {
     width: 100%;
   }
 }
+
+/* ============================================
+   ADPCM Converter Specific Styles
+   ============================================ */
+
+.upload-section {
+  margin-bottom: 2rem;
+}
+
+.upload-area {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 2rem;
+  background: var(--bg-dark);
+  border: 3px dashed var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-height: 200px;
+  justify-content: center;
+}
+
+.upload-area:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+  transform: scale(1.01);
+}
+
+.upload-area.drag-over {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--primary);
+  border-width: 3px;
+  transform: scale(1.02);
+}
+
+.upload-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.upload-prompt .upload-icon {
+  font-size: 3rem;
+}
+
+.upload-prompt p {
+  margin: 0;
+  text-align: center;
+}
+
+.upload-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.upload-info .upload-icon {
+  font-size: 3rem;
+  color: var(--success);
+}
+
+.upload-info p {
+  margin: 0;
+  text-align: center;
+}
+
+.status-section {
+  margin-bottom: 2rem;
+}
+
+.status-info {
+  padding: 1rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border-left: 4px solid var(--primary);
+}
+
+.status-info p {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.waveform-section {
+  margin-bottom: 2rem;
+}
+
+.waveform-item {
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 2px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.waveform-item h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.waveform-item canvas {
+  width: 100%;
+  border-radius: 4px;
+  background: #1a1a2e;
+  display: block;
+  margin-bottom: 0.75rem;
+}
+
+.compression-info {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border-left: 4px solid var(--success);
+}
+
+.compression-info p {
+  margin: 0.5rem 0;
+}
+
+.export-actions {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.code-preview {
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 1.5rem;
+  border: 2px solid var(--border);
+}
+
+.code-preview h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.code-preview .tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+
+.code-preview .tab-btn {
+  padding: 0.5rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.code-preview .tab-btn:hover {
+  color: var(--text);
+  border-bottom-color: var(--primary);
+}
+
+.code-preview .tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+.code-preview pre {
+  background: var(--bg-dark);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .export-actions {
+    flex-direction: column;
+  }
+
+  .export-actions .btn {
+    width: 100%;
+  }
+
+  .waveform-item canvas {
+    width: 100%;
+    height: auto;
+  }
+}

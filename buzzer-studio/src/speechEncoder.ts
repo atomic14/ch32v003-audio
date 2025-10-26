@@ -17,7 +17,8 @@ export function initSpeechEncoder(container: HTMLElement): void {
         <h2>Speech Encoder (Talkie / LPC)</h2>
         <p class="section-description">
           Convert WAV files to <strong>Talkie-compatible</strong> LPC (Linear Predictive Coding) data for TMS5220/TMS5100 speech chips.
-          Upload any WAV file to generate compressed speech data that can be played back on Arduino using the Talkie library.
+          Upload any WAV file to generate compressed speech data that can be played back on using the Talkie library. NOTE - this is a
+          bit experimental - but seems to work well.
         </p>
       </div>
 
