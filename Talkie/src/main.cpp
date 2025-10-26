@@ -2,12 +2,13 @@
 // #include "audio/testing_testing_adpcm_2bit.h"
 // #include "vocab/clock.h"
 // #include "vocab/phrases.h"
-#include "vocab/Vocab_US_TI99.h"
+// #include "vocab/Vocab_US_TI99.h"
 #include "vocab/spk_spell.h"
 // #include "vocab/bomb.h"
 #include "Talkie.h"
 #include "player.h"
 #include <debug.h>
+#include <stdlib.h>
 
 void NMI_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 void HardFault_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
@@ -75,32 +76,47 @@ int main(void) {
   // 	// player.play(talkieStream);
   // }
 
-  const uint8_t *phrases[] = {Vocab_US_TI99::spALL,  Vocab_US_TI99::spYOUR,
-                              Vocab_US_TI99::spBASE, Vocab_US_TI99::spARE,
-                              Vocab_US_TI99::spBE,   Vocab_US_TI99::spLONG,
-                              Vocab_US_TI99::spTO};
-  for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
-    talkieStream.say(phrases[i]);
-    player.play(talkieStream);
+  // const uint8_t *phrases[] = {Vocab_US_TI99::spALL,  Vocab_US_TI99::spYOUR,
+  //                             Vocab_US_TI99::spBASE, Vocab_US_TI99::spARE,
+  //                             Vocab_US_TI99::spBE,   Vocab_US_TI99::spLONG,
+  //                             Vocab_US_TI99::spTO};
+  // for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
+  //   talkieStream.say(phrases[i]);
+  //   player.play(talkieStream);
+  // }
+  const uint8_t *phrases[] = {
+      spk_spell::spNOW_SPELL, spk_spell::spCIRCUIT,
+      spk_spell::spC,         spk_spell::spI,
+      spk_spell::spR,         spk_spell::spC,
+      spk_spell::spU,         spk_spell::spI,
+      spk_spell::spT,         spk_spell::spYOU_ARE_CORRECT,
+      spk_spell::spBEEPS_1,   spk_spell::spBEEPS_2,
+      spk_spell::spBEEPS_3,   spk_spell::spBEEPS_4,
+      spk_spell::spA,         spk_spell::spB,
+      spk_spell::spC,         spk_spell::spD,
+      spk_spell::spE,         spk_spell::spF,
+      spk_spell::spG,         spk_spell::spH,
+      spk_spell::spI,         spk_spell::spJ,
+      spk_spell::spK,         spk_spell::spL,
+      spk_spell::spM,         spk_spell::spN,
+      spk_spell::spO,         spk_spell::spP,
+      spk_spell::spQ,         spk_spell::spR,
+      spk_spell::spS,         spk_spell::spT,
+      spk_spell::spU,         spk_spell::spV,
+      spk_spell::spW,         spk_spell::spX,
+      spk_spell::spY,         spk_spell::spZ};
+  while (1) {
+    for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
+      talkieStream.say(phrases[i], TALKIE_TMS5100);
+      player.play(talkieStream);
+    }
   }
-// const uint8_t *phrases[] = {
-  //     spk_spell::spNOW_SPELL, spk_spell::spMACHINE, spk_spell::spM,
-  //     spk_spell::spA,       spk_spell::spC, spk_spell::spH, spk_spell::spI,
-  //     spk_spell::spN,       spk_spell::spE, spk_spell::spYOU_ARE_CORRECT,
-  //     spk_spell::spBEEPS_1,   spk_spell::spBEEPS_2, spk_spell::spBEEPS_3,
-  //     spk_spell::spBEEPS_4, spk_spell::spA, spk_spell::spB, spk_spell::spC,
-  //     spk_spell::spD,       spk_spell::spE,       spk_spell::spF,
-  //     spk_spell::spG,         spk_spell::spH,       spk_spell::spI,
-  //     spk_spell::spJ,       spk_spell::spK, spk_spell::spL, spk_spell::spM,
-  //     spk_spell::spN,       spk_spell::spO,       spk_spell::spP,
-  //     spk_spell::spQ,         spk_spell::spR,       spk_spell::spS,
-  //     spk_spell::spT,       spk_spell::spU, spk_spell::spV, spk_spell::spW,
-  //     spk_spell::spX,       spk_spell::spY,       spk_spell::spZ};
-  // while (1) {
-  //   for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
-  //     talkieStream.say(phrases[i], TALKIE_TMS5100);
-  //     player.play(talkieStream);
-  //   }
+  // while(1) {
+  //   // pick a random phrase
+  //   const uint8_t *phrase = all_phrases[rand() % sizeof(all_phrases) /
+  //   sizeof(all_phrases[0])]; talkieStream.say(phrase, TALKIE_TMS5100);
+  //   player.play(talkieStream);
+  //   Delay_Ms(500);
   // }
 }
 
