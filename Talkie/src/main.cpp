@@ -3,7 +3,8 @@
 // #include "vocab/clock.h"
 // #include "vocab/phrases.h"
 // #include "vocab/Vocab_US_TI99.h"
-#include "vocab/spk_spell.h"
+// #include "vocab/spk_spell.h"
+#include "vocab/arnie.h"
 // #include "vocab/bomb.h"
 #include "Talkie.h"
 #include "player.h"
@@ -84,33 +85,33 @@ int main(void) {
   //   talkieStream.say(phrases[i]);
   //   player.play(talkieStream);
   // }
-  const uint8_t *phrases[] = {
-      spk_spell::spNOW_SPELL, spk_spell::spCIRCUIT,
-      spk_spell::spC,         spk_spell::spI,
-      spk_spell::spR,         spk_spell::spC,
-      spk_spell::spU,         spk_spell::spI,
-      spk_spell::spT,         spk_spell::spYOU_ARE_CORRECT,
-      spk_spell::spBEEPS_1,   spk_spell::spBEEPS_2,
-      spk_spell::spBEEPS_3,   spk_spell::spBEEPS_4,
-      spk_spell::spA,         spk_spell::spB,
-      spk_spell::spC,         spk_spell::spD,
-      spk_spell::spE,         spk_spell::spF,
-      spk_spell::spG,         spk_spell::spH,
-      spk_spell::spI,         spk_spell::spJ,
-      spk_spell::spK,         spk_spell::spL,
-      spk_spell::spM,         spk_spell::spN,
-      spk_spell::spO,         spk_spell::spP,
-      spk_spell::spQ,         spk_spell::spR,
-      spk_spell::spS,         spk_spell::spT,
-      spk_spell::spU,         spk_spell::spV,
-      spk_spell::spW,         spk_spell::spX,
-      spk_spell::spY,         spk_spell::spZ};
-  while (1) {
-    for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
-      talkieStream.say(phrases[i], TALKIE_TMS5100);
-      player.play(talkieStream);
-    }
-  }
+  // const uint8_t *phrases[] = {
+  //     spk_spell::spNOW_SPELL, spk_spell::spCIRCUIT,
+  //     spk_spell::spC,         spk_spell::spI,
+  //     spk_spell::spR,         spk_spell::spC,
+  //     spk_spell::spU,         spk_spell::spI,
+  //     spk_spell::spT,         spk_spell::spYOU_ARE_CORRECT,
+  //     spk_spell::spBEEPS_1,   spk_spell::spBEEPS_2,
+  //     spk_spell::spBEEPS_3,   spk_spell::spBEEPS_4,
+  //     spk_spell::spA,         spk_spell::spB,
+  //     spk_spell::spC,         spk_spell::spD,
+  //     spk_spell::spE,         spk_spell::spF,
+  //     spk_spell::spG,         spk_spell::spH,
+  //     spk_spell::spI,         spk_spell::spJ,
+  //     spk_spell::spK,         spk_spell::spL,
+  //     spk_spell::spM,         spk_spell::spN,
+  //     spk_spell::spO,         spk_spell::spP,
+  //     spk_spell::spQ,         spk_spell::spR,
+  //     spk_spell::spS,         spk_spell::spT,
+  //     spk_spell::spU,         spk_spell::spV,
+  //     spk_spell::spW,         spk_spell::spX,
+  //     spk_spell::spY,         spk_spell::spZ};
+  // while (1) {
+  //   for (uint8_t i = 0; i < sizeof(phrases) / sizeof(phrases[0]); i++) {
+  //     talkieStream.say(phrases[i], TALKIE_TMS5100);
+  //     player.play(talkieStream);
+  //   }
+  // }
   // while(1) {
   //   // pick a random phrase
   //   const uint8_t *phrase = all_phrases[rand() % sizeof(all_phrases) /
@@ -118,6 +119,8 @@ int main(void) {
   //   player.play(talkieStream);
   //   Delay_Ms(500);
   // }
+  talkieStream.say(arnie::spARNIE, TALKIE_TMS5100);
+  player.play(talkieStream);
 }
 
 void NMI_Handler(void) {}

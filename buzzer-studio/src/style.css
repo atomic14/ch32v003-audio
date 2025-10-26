@@ -1418,3 +1418,255 @@ button:active {
     width: 100%;
   }
 }
+
+/* ============================================
+   Speech Encoder Styles
+   ============================================ */
+
+.speech-encoder {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.speech-encoder .section {
+  background: var(--bg-medium);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+}
+
+.file-upload-area {
+  position: relative;
+}
+
+.file-input {
+  position: absolute;
+  width: 0.1px;
+  height: 0.1px;
+  opacity: 0;
+  overflow: hidden;
+  z-index: -1;
+}
+
+.file-upload-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 2rem;
+  background: var(--bg-dark);
+  border: 3px dashed var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.file-upload-label:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+  transform: scale(1.02);
+}
+
+.file-upload-label.drag-over {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: var(--primary);
+  border-width: 3px;
+  transform: scale(1.03);
+}
+
+.upload-icon {
+  font-size: 3rem;
+}
+
+.upload-text {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.upload-hint {
+  font-size: 0.9rem;
+  color: var(--text-dim);
+}
+
+.file-info {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg-light);
+  border-radius: 8px;
+  border-left: 4px solid var(--success);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.encoder-settings {
+  width: 100%;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.setting-group label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.setting-group label span {
+  font-size: 0.9rem;
+}
+
+.setting-input {
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-dark);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.setting-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.setting-checkbox {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  margin-right: 0.5rem;
+}
+
+.setting-hint {
+  margin: 0;
+  padding: 0;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  font-weight: 400;
+  font-style: italic;
+}
+
+.encode-controls {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Waveform visualization */
+.waveform-inline {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg-card);
+  border-radius: 8px;
+  border: 2px solid var(--border);
+}
+
+.waveforms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.waveform-container {
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 1rem;
+  border: 2px solid var(--border);
+}
+
+.waveform-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.waveform-header h4 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.waveform-canvas {
+  width: 100%;
+  height: 120px;
+  border-radius: 4px;
+  background: #1a1a2e;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.waveform-info {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.btn-small {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.85rem;
+  min-width: auto;
+}
+
+.output-stats-large {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.hex-output {
+  width: 100%;
+  background: var(--bg-dark);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  padding: 1rem;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.output-info {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-light);
+  border-radius: 6px;
+  border-left: 4px solid var(--primary);
+  font-weight: 600;
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .encode-controls {
+    flex-direction: column;
+  }
+
+  .encode-controls .btn {
+    width: 100%;
+  }
+}

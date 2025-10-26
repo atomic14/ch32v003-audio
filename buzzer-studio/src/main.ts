@@ -2,6 +2,7 @@ import './style.css';
 import { initSoundEffects } from './soundEffects';
 import { initMidiExtractor } from './midiExtractor';
 import { initTalkiePlayer } from './talkiePlayer';
+import { initSpeechEncoder } from './speechEncoder';
 
 // Create the main application structure
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -20,15 +21,20 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="tab-icon">🔊</span>
         <span class="tab-label">Sound Effects</span>
       </button>
+      <button class="tab-button" data-tab="speech-encoder">
+        <span class="tab-icon">🎙️</span>
+        <span class="tab-label">Speech Encoder</span>
+      </button>
       <button class="tab-button" data-tab="talkie-player">
         <span class="tab-icon">🤖</span>
-        <span class="tab-label">Talkie Speech</span>
+        <span class="tab-label">Talkie Player</span>
       </button>
     </nav>
 
     <main class="tab-content">
       <div id="midi-extractor" class="tab-pane active"></div>
       <div id="sound-effects" class="tab-pane"></div>
+      <div id="speech-encoder" class="tab-pane"></div>
       <div id="talkie-player" class="tab-pane"></div>
     </main>
 
@@ -47,10 +53,12 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 // Initialize all tools
 const soundEffectsContainer = document.getElementById('sound-effects')!;
 const midiExtractorContainer = document.getElementById('midi-extractor')!;
+const speechEncoderContainer = document.getElementById('speech-encoder')!;
 const talkiePlayerContainer = document.getElementById('talkie-player')!;
 
 initSoundEffects(soundEffectsContainer);
 initMidiExtractor(midiExtractorContainer);
+initSpeechEncoder(speechEncoderContainer);
 initTalkiePlayer(talkiePlayerContainer);
 
 // Tab switching logic
