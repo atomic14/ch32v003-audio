@@ -36,7 +36,10 @@ function midiToFreq(noteNum: number): number {
  * Notes with small overlaps will have their duration adjusted rather than being split into separate streams
  * @param overlapToleranceMs - Maximum overlap in milliseconds to tolerate (default: 50ms)
  */
-function splitIntoMonophonicStreams(notes: NoteData[], overlapToleranceMs: number = 50): NoteData[][] {
+function splitIntoMonophonicStreams(
+  notes: NoteData[],
+  overlapToleranceMs: number = 50
+): NoteData[][] {
   if (notes.length === 0) return [];
 
   // Sort notes by start time

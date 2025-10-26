@@ -252,12 +252,15 @@ export function initSpeechEncoder(container: HTMLElement): void {
 
   // Waveform sections
   const rawWaveformSection = container.querySelector<HTMLElement>('#raw-waveform-section')!;
-  const preprocessedWaveformSection = container.querySelector<HTMLElement>('#preprocessed-waveform-section')!;
+  const preprocessedWaveformSection = container.querySelector<HTMLElement>(
+    '#preprocessed-waveform-section'
+  )!;
   const encodedWaveformSection = container.querySelector<HTMLElement>('#encoded-waveform-section')!;
 
   // Waveform elements
   const waveformRaw = container.querySelector<HTMLCanvasElement>('#waveform-raw')!;
-  const waveformPreprocessed = container.querySelector<HTMLCanvasElement>('#waveform-preprocessed')!;
+  const waveformPreprocessed =
+    container.querySelector<HTMLCanvasElement>('#waveform-preprocessed')!;
   const waveformEncoded = container.querySelector<HTMLCanvasElement>('#waveform-encoded')!;
   const playRawBtn = container.querySelector<HTMLButtonElement>('#play-raw')!;
   const playPreprocessedBtn = container.querySelector<HTMLButtonElement>('#play-preprocessed')!;
@@ -379,7 +382,7 @@ export function initSpeechEncoder(container: HTMLElement): void {
     source.connect(audioContext.destination);
     source.start();
 
-    return new Promise(resolve => {
+    return new Promise((resolve) => {
       source.onended = () => resolve();
     });
   }
@@ -426,23 +429,25 @@ export function initSpeechEncoder(container: HTMLElement): void {
     fileUploadLabel.classList.remove('drag-over');
   });
 
-  fileUploadLabel.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    fileUploadLabel.classList.remove('drag-over');
+  fileUploadLabel.addEventListener('drop', (e) => {
+    void (async () => {
+      e.preventDefault();
+      fileUploadLabel.classList.remove('drag-over');
 
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
+      const files = e.dataTransfer?.files;
+      if (!files || files.length === 0) return;
 
-    // Only accept .wav files
-    const file = files[0];
-    if (!file.name.toLowerCase().endsWith('.wav')) {
-      showStatus('Please drop a WAV file', 'error');
-      return;
-    }
+      // Only accept .wav files
+      const file = files[0];
+      if (!file.name.toLowerCase().endsWith('.wav')) {
+        showStatus('Please drop a WAV file', 'error');
+        return;
+      }
 
-    // Set the file and trigger the same loading logic
-    currentFile = file;
-    await handleFileLoad(currentFile);
+      // Set the file and trigger the same loading logic
+      currentFile = file;
+      await handleFileLoad(currentFile);
+    })();
   });
 
   async function handleFileLoad(file: File) {
@@ -454,7 +459,7 @@ export function initSpeechEncoder(container: HTMLElement): void {
       // Load and parse WAV to show raw waveform immediately
       const arrayBuffer = await file.arrayBuffer();
       const tempEncoder = new LPCEncoder(getSettings());
-      const samples = await tempEncoder.loadAndResampleWav(arrayBuffer);
+      const samples = tempEncoder.loadAndResampleWav(arrayBuffer);
 
       if (!samples) {
         showStatus('Invalid WAV file format. Please use PCM WAV files.', 'error');
@@ -489,139 +494,152 @@ export function initSpeechEncoder(container: HTMLElement): void {
     }
   }
 
-  fileInput.addEventListener('change', async (e) => {
-    const files = (e.target as HTMLInputElement).files;
-    if (!files || files.length === 0) return;
+  fileInput.addEventListener('change', (e) => {
+    void (async () => {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
 
-    currentFile = files[0];
-    await handleFileLoad(currentFile);
+      currentFile = files[0];
+      await handleFileLoad(currentFile);
+    })();
   });
 
-  encodeBtn.addEventListener('click', async () => {
-    if (!currentFile) return;
+  encodeBtn.addEventListener('click', () => {
+    void (async () => {
+      if (!currentFile) return;
 
-    encodeBtn.disabled = true;
-    copyHexBtn.disabled = true;
-    sendToPlayerBtn.disabled = true;
-    showStatus('Encoding... This may take a moment.', 'info');
-
-    try {
-      const settings = getSettings();
-      encoder = new LPCEncoder(settings);
-
-      console.log('Starting encoding...');
-      const arrayBuffer = await currentFile.arrayBuffer();
-      console.log('WAV file loaded, size:', arrayBuffer.byteLength);
-
-      const result = await encoder.encodeWav(arrayBuffer);
-      console.log('Encoding complete, result:', result);
-
-      if (!result.hex) {
-        showStatus('Encoding failed. Please check your WAV file format.', 'error');
-        encodeBtn.disabled = false;
-        return;
-      }
-
-      encodedHex = result.hex;
-      rawSamples = result.rawSamples;
-      preprocessedSamples = result.preprocessedSamples;
-
-      // Decode LPC data to get encoded samples
-      const device = settings.tablesVariant === 'tms5220' ? TalkieDevice.TMS5220 : TalkieDevice.TMS5100;
-      const hexData = parseHexString(encodedHex);
-      if (hexData) {
-        const talkieStream = new TalkieStream();
-        talkieStream.say(hexData, device);
-        encodedSamples = talkieStream.generateAllSamples();
-      } else {
-        throw new Error('Failed to parse encoded hex data');
-      }
-
-      // Show preprocessed waveform
-      preprocessedWaveformSection.classList.remove('hidden');
-      drawWaveform(waveformPreprocessed, preprocessedSamples, '#10b981');
-      preprocessedInfo.textContent = `${preprocessedSamples.length} samples, ${formatDuration(preprocessedSamples.length, 8000)}`;
-
-      // Show encoded waveform
-      encodedWaveformSection.classList.remove('hidden');
-      drawWaveform(waveformEncoded, encodedSamples, '#f59e0b');
-      encodedInfo.textContent = `${encodedSamples.length} samples, ${formatDuration(encodedSamples.length, 8000)}`;
-
-      // Show output
-      hexOutput.value = encodedHex;
-      outputSection.classList.remove('hidden');
-
-      const byteCount = encodedHex.split(',').length;
-      const originalSize = rawSamples.length * 2; // 16-bit samples
-      const compressionRatio = (originalSize / byteCount).toFixed(1);
-      outputStats.textContent = `${byteCount} bytes (${formatByteSize(byteCount)}) · ${compressionRatio}:1 compression`;
-
-      copyHexBtn.disabled = false;
-      sendToPlayerBtn.disabled = false;
-      encodeBtn.disabled = false;
-
-      showStatus('Encoding complete!', 'success');
-    } catch (error) {
-      console.error('Encoding error:', error);
-      const errorMsg = (error as Error).message;
-
-      // Provide user-friendly error messages
-      let userMessage = 'Encoding failed: ';
-      if (errorMsg.includes('parse') || errorMsg.includes('Failed to parse')) {
-        userMessage = 'Invalid WAV file format. Please use uncompressed PCM WAV files (8-bit or 16-bit).';
-      } else if (errorMsg.includes('resampling') || errorMsg.includes('Invalid array length')) {
-        userMessage = 'Error processing audio. The file may be corrupted or in an unsupported format.';
-      } else if (errorMsg.includes('hex data')) {
-        userMessage = 'Internal error generating output. Please try with different settings.';
-      } else {
-        userMessage += errorMsg;
-      }
-
-      showStatus(userMessage, 'error');
-      encodeBtn.disabled = false;
+      encodeBtn.disabled = true;
       copyHexBtn.disabled = true;
       sendToPlayerBtn.disabled = true;
+      showStatus('Encoding... This may take a moment.', 'info');
 
-      // Hide waveform sections on error
-      preprocessedWaveformSection.classList.add('hidden');
-      encodedWaveformSection.classList.add('hidden');
-    }
+      try {
+        const settings = getSettings();
+        encoder = new LPCEncoder(settings);
+
+        console.log('Starting encoding...');
+        const arrayBuffer = await currentFile.arrayBuffer();
+        console.log('WAV file loaded, size:', arrayBuffer.byteLength);
+
+        const result = encoder.encodeWav(arrayBuffer);
+        console.log('Encoding complete, result:', result);
+
+        if (!result.hex) {
+          showStatus('Encoding failed. Please check your WAV file format.', 'error');
+          encodeBtn.disabled = false;
+          return;
+        }
+
+        encodedHex = result.hex;
+        rawSamples = result.rawSamples;
+        preprocessedSamples = result.preprocessedSamples;
+
+        // Decode LPC data to get encoded samples
+        const device =
+          settings.tablesVariant === 'tms5220' ? TalkieDevice.TMS5220 : TalkieDevice.TMS5100;
+        const hexData = parseHexString(encodedHex);
+        if (hexData) {
+          const talkieStream = new TalkieStream();
+          talkieStream.say(hexData, device);
+          encodedSamples = talkieStream.generateAllSamples();
+        } else {
+          throw new Error('Failed to parse encoded hex data');
+        }
+
+        // Show preprocessed waveform
+        preprocessedWaveformSection.classList.remove('hidden');
+        drawWaveform(waveformPreprocessed, preprocessedSamples, '#10b981');
+        preprocessedInfo.textContent = `${preprocessedSamples.length} samples, ${formatDuration(preprocessedSamples.length, 8000)}`;
+
+        // Show encoded waveform
+        encodedWaveformSection.classList.remove('hidden');
+        drawWaveform(waveformEncoded, encodedSamples, '#f59e0b');
+        encodedInfo.textContent = `${encodedSamples.length} samples, ${formatDuration(encodedSamples.length, 8000)}`;
+
+        // Show output
+        hexOutput.value = encodedHex;
+        outputSection.classList.remove('hidden');
+
+        const byteCount = encodedHex.split(',').length;
+        const originalSize = rawSamples.length * 2; // 16-bit samples
+        const compressionRatio = (originalSize / byteCount).toFixed(1);
+        outputStats.textContent = `${byteCount} bytes (${formatByteSize(byteCount)}) · ${compressionRatio}:1 compression`;
+
+        copyHexBtn.disabled = false;
+        sendToPlayerBtn.disabled = false;
+        encodeBtn.disabled = false;
+
+        showStatus('Encoding complete!', 'success');
+      } catch (error) {
+        console.error('Encoding error:', error);
+        const errorMsg = (error as Error).message;
+
+        // Provide user-friendly error messages
+        let userMessage = 'Encoding failed: ';
+        if (errorMsg.includes('parse') || errorMsg.includes('Failed to parse')) {
+          userMessage =
+            'Invalid WAV file format. Please use uncompressed PCM WAV files (8-bit or 16-bit).';
+        } else if (errorMsg.includes('resampling') || errorMsg.includes('Invalid array length')) {
+          userMessage =
+            'Error processing audio. The file may be corrupted or in an unsupported format.';
+        } else if (errorMsg.includes('hex data')) {
+          userMessage = 'Internal error generating output. Please try with different settings.';
+        } else {
+          userMessage += errorMsg;
+        }
+
+        showStatus(userMessage, 'error');
+        encodeBtn.disabled = false;
+        copyHexBtn.disabled = true;
+        sendToPlayerBtn.disabled = true;
+
+        // Hide waveform sections on error
+        preprocessedWaveformSection.classList.add('hidden');
+        encodedWaveformSection.classList.add('hidden');
+      }
+    })();
   });
 
   // Play button handlers
-  playRawBtn.addEventListener('click', async () => {
-    if (!rawSamples) return;
-    playRawBtn.disabled = true;
-    try {
-      await playAudio(rawSamples);
-    } finally {
-      playRawBtn.disabled = false;
-    }
+  playRawBtn.addEventListener('click', () => {
+    void (async () => {
+      if (!rawSamples) return;
+      playRawBtn.disabled = true;
+      try {
+        await playAudio(rawSamples);
+      } finally {
+        playRawBtn.disabled = false;
+      }
+    })();
   });
 
-  playPreprocessedBtn.addEventListener('click', async () => {
-    if (!preprocessedSamples) return;
-    playPreprocessedBtn.disabled = true;
-    try {
-      await playAudio(preprocessedSamples);
-    } finally {
-      playPreprocessedBtn.disabled = false;
-    }
+  playPreprocessedBtn.addEventListener('click', () => {
+    void (async () => {
+      if (!preprocessedSamples) return;
+      playPreprocessedBtn.disabled = true;
+      try {
+        await playAudio(preprocessedSamples);
+      } finally {
+        playPreprocessedBtn.disabled = false;
+      }
+    })();
   });
 
-  playEncodedBtn.addEventListener('click', async () => {
-    if (!encodedSamples) return;
-    playEncodedBtn.disabled = true;
-    try {
-      await playAudio(encodedSamples);
-    } finally {
-      playEncodedBtn.disabled = false;
-    }
+  playEncodedBtn.addEventListener('click', () => {
+    void (async () => {
+      if (!encodedSamples) return;
+      playEncodedBtn.disabled = true;
+      try {
+        await playAudio(encodedSamples);
+      } finally {
+        playEncodedBtn.disabled = false;
+      }
+    })();
   });
 
   copyHexBtn.addEventListener('click', () => {
     hexOutput.select();
-    navigator.clipboard.writeText(encodedHex);
+    void navigator.clipboard.writeText(encodedHex);
     showStatus('Hex data copied to clipboard!', 'success');
   });
 
@@ -632,8 +650,8 @@ export function initSpeechEncoder(container: HTMLElement): void {
 
     if (talkieTab && talkieInput) {
       // Activate Talkie tab
-      document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+      document.querySelectorAll('.tab-button').forEach((btn) => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach((pane) => pane.classList.remove('active'));
 
       talkieTab.classList.add('active');
       document.getElementById('talkie-player')!.classList.add('active');

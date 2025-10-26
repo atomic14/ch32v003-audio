@@ -54,7 +54,7 @@ function closestValueFinder(actual: number, table: number[]): number {
 class BitHelpers {
   static valueToBinary(value: number, bits: number): string {
     // Clamp to field width to prevent overflow into subsequent fields
-    const mask = bits >= 31 ? 0x7fffffff : ((1 << bits) - 1);
+    const mask = bits >= 31 ? 0x7fffffff : (1 << bits) - 1;
     const v = (value & mask) >>> 0;
     return v.toString(2).padStart(bits, '0');
   }
@@ -66,13 +66,19 @@ class BitHelpers {
 
 // Reflector class - LPC reflection coeffs and RMS
 class Reflector {
-  public ks: number[] = new Array(11).fill(0); // 1..10 used
+  public ks: number[] = new Array<number>(11).fill(0); // 1..10 used
   private _rms: number = 0;
   private limitRMS: boolean = false;
   public codingTable: CodingTable;
   public unvoicedThreshold: number;
 
-  constructor(codingTable: CodingTable, unvoicedThreshold: number, k?: number[], rms?: number, limitRMS?: boolean) {
+  constructor(
+    codingTable: CodingTable,
+    unvoicedThreshold: number,
+    k?: number[],
+    rms?: number,
+    limitRMS?: boolean
+  ) {
     this.codingTable = codingTable;
     this.unvoicedThreshold = unvoicedThreshold;
     if (k !== undefined && rms !== undefined && limitRMS !== undefined) {
@@ -99,7 +105,7 @@ class Reflector {
     unvoicedThreshold: number
   ): Reflector {
     const p = 10;
-    const k: number[] = new Array(11).fill(0); // 1..10
+    const k: number[] = new Array<number>(11).fill(0); // 1..10
     // Guard: silent or degenerate frame
     if (!isFinite(r[0]) || r[0] === 0) {
       const refl = new Reflector(codingTable, unvoicedThreshold);
@@ -108,7 +114,7 @@ class Reflector {
     }
 
     // Work arrays: LPC a[1..p], tmp
-    const a: number[] = new Array(p + 1).fill(0); // a[0] unused
+    const a: number[] = new Array<number>(p + 1).fill(0); // a[0] unused
     let E = r[0];
 
     for (let i = 1; i <= p; i++) {
@@ -148,7 +154,10 @@ class Reflector {
 
   get rms(): number {
     if (this.limitRMS) {
-      const capIdx = Math.max(0, Math.min(this.codingTable.kStopFrameIndex - 1, this.codingTable.rms.length - 1));
+      const capIdx = Math.max(
+        0,
+        Math.min(this.codingTable.kStopFrameIndex - 1, this.codingTable.rms.length - 1)
+      );
       const cap = this.codingTable.rms[capIdx];
       return this._rms >= cap ? cap : this._rms;
     }
@@ -184,10 +193,7 @@ class FrameData {
   }
 
   stopFrame(): FrameData {
-    const reflector = new Reflector(
-      this.codingTable,
-      this.reflector.unvoicedThreshold
-    );
+    const reflector = new Reflector(this.codingTable, this.reflector.unvoicedThreshold);
     reflector.rms = this.codingTable.rms[this.codingTable.kStopFrameIndex];
     return new FrameData(reflector, 0, false);
   }
@@ -208,19 +214,13 @@ class FrameData {
       if (!this.repeat) {
         // K1-K4 (always included for non-repeat frames)
         for (let k = 1; k <= 4; k++) {
-          parameters[`kParameterK${k}`] = this.parameterizedValueForK(
-            this.reflector.ks[k],
-            k
-          );
+          parameters[`kParameterK${k}`] = this.parameterizedValueForK(this.reflector.ks[k], k);
         }
 
         // K5-K10 (only for voiced frames)
         if (parameters['kParameterPitch'] !== 0 && this.reflector.isVoiced()) {
           for (let k = 5; k <= 10; k++) {
-            parameters[`kParameterK${k}`] = this.parameterizedValueForK(
-              this.reflector.ks[k],
-              k
-            );
+            parameters[`kParameterK${k}`] = this.parameterizedValueForK(this.reflector.ks[k], k);
           }
         }
       }
@@ -303,7 +303,7 @@ class HexConverter {
 
   static process(nibbles: string[]): string {
     const bytes = this.preprocess(nibbles);
-    return bytes.map(b => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(',');
+    return bytes.map((b) => '0x' + b.toString(16).padStart(2, '0').toUpperCase()).join(',');
   }
 }
 
@@ -318,7 +318,7 @@ export class LPCEncoder {
   }
 
   // Helper method to parse and resample WAV for preview
-  async loadAndResampleWav(arrayBuffer: ArrayBuffer): Promise<Float32Array | null> {
+  loadAndResampleWav(arrayBuffer: ArrayBuffer): Float32Array | null {
     const wavData = this.parseWav(arrayBuffer);
     if (!wavData) {
       return null;
@@ -334,18 +334,28 @@ export class LPCEncoder {
     return samples;
   }
 
-  async encodeWav(arrayBuffer: ArrayBuffer): Promise<{
+  encodeWav(arrayBuffer: ArrayBuffer): {
     hex: string;
     rawSamples: Float32Array;
     preprocessedSamples: Float32Array;
-  }> {
+  } {
     // Parse WAV file
     const wavData = this.parseWav(arrayBuffer);
     if (!wavData) {
-      throw new Error('Failed to parse WAV file (expecting PCM RIFF/WAVE, 8/16/24/32-bit integer).');
+      throw new Error(
+        'Failed to parse WAV file (expecting PCM RIFF/WAVE, 8/16/24/32-bit integer).'
+      );
     }
 
-    console.log('WAV parsed:', wavData.sampleRate, 'Hz,', wavData.numChannels, 'channel(s) ->',  wavData.samples.length, 'samples (mono)');
+    console.log(
+      'WAV parsed:',
+      wavData.sampleRate,
+      'Hz,',
+      wavData.numChannels,
+      'channel(s) ->',
+      wavData.samples.length,
+      'samples (mono)'
+    );
 
     // Resample to 8kHz if needed
     let samples = wavData.samples;
@@ -429,7 +439,7 @@ export class LPCEncoder {
     }
 
     // Convert frames to parameters
-    const parametersList = frames.map(frame => frame.parameters());
+    const parametersList = frames.map((frame) => frame.parameters());
 
     // Encode to binary
     const nibbles = FrameDataBinaryEncoder.process(this.codingTable, parametersList);
@@ -440,7 +450,7 @@ export class LPCEncoder {
     return {
       hex,
       rawSamples,
-      preprocessedSamples
+      preprocessedSamples,
     };
   }
 
@@ -452,7 +462,9 @@ export class LPCEncoder {
     const hopSize = frameSize;
     const analysisWindowSize = frameSize * this.settings.windowWidth;
 
-    console.log(`Processing with windowWidth=${this.settings.windowWidth}, hopSize=${hopSize}, analysisWindow=${analysisWindowSize}`);
+    console.log(
+      `Processing with windowWidth=${this.settings.windowWidth}, hopSize=${hopSize}, analysisWindow=${analysisWindowSize}`
+    );
 
     for (let i = 0; i + frameSize <= samples.length; i += hopSize) {
       // Extract analysis window (may be larger than hopSize for overlap)
@@ -491,7 +503,9 @@ export class LPCEncoder {
       frames.push(frameData);
     }
 
-    console.log(`Generated ${frames.length} frames (should be ~${Math.floor(samples.length / frameSize)} for correct playback speed)`);
+    console.log(
+      `Generated ${frames.length} frames (should be ~${Math.floor(samples.length / frameSize)} for correct playback speed)`
+    );
     return frames;
   }
 
@@ -499,11 +513,21 @@ export class LPCEncoder {
     const view = new DataView(arrayBuffer);
 
     // Check RIFF header
-    const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+    const riff = String.fromCharCode(
+      view.getUint8(0),
+      view.getUint8(1),
+      view.getUint8(2),
+      view.getUint8(3)
+    );
     if (riff !== 'RIFF') return null;
 
     // Check WAVE format
-    const wave = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
+    const wave = String.fromCharCode(
+      view.getUint8(8),
+      view.getUint8(9),
+      view.getUint8(10),
+      view.getUint8(11)
+    );
     if (wave !== 'WAVE') return null;
 
     // Find fmt chunk
@@ -539,7 +563,13 @@ export class LPCEncoder {
 
           if (dataChunkId === 'data') {
             // Read sample data
-            const samples = this.readSamples(view, dataOffset + 8, dataChunkSize, bitsPerSample, numChannels);
+            const samples = this.readSamples(
+              view,
+              dataOffset + 8,
+              dataChunkSize,
+              bitsPerSample,
+              numChannels
+            );
 
             return {
               sampleRate,
@@ -561,7 +591,13 @@ export class LPCEncoder {
     return null;
   }
 
-  private readSamples(view: DataView, offset: number, size: number, bitsPerSample: number, numChannels: number): Float32Array {
+  private readSamples(
+    view: DataView,
+    offset: number,
+    size: number,
+    bitsPerSample: number,
+    numChannels: number
+  ): Float32Array {
     const bytesPerSample = bitsPerSample / 8;
     if (bytesPerSample <= 0) return new Float32Array(0);
 
@@ -585,7 +621,7 @@ export class LPCEncoder {
           const b1 = view.getUint8(sampleOffset + 1);
           const b2 = view.getUint8(sampleOffset + 2);
           let int24 = (b2 << 16) | (b1 << 8) | b0;
-          if (int24 & 0x800000) int24 |= 0xFF000000; // sign extend to 32 bits
+          if (int24 & 0x800000) int24 |= 0xff000000; // sign extend to 32 bits
           sample = int24 / 8388608.0; // 2^23
         } else if (bitsPerSample === 32) {
           // 32-bit integer PCM; if you ever allow IEEE float (audioFormat==3), use view.getFloat32(..., true)
@@ -611,7 +647,9 @@ export class LPCEncoder {
     const newLength = Math.floor(samples.length / ratio);
 
     if (newLength <= 0 || !isFinite(newLength)) {
-      throw new Error(`Invalid resampling: fromRate=${fromRate}, toRate=${toRate}, samples=${samples.length}, newLength=${newLength}`);
+      throw new Error(
+        `Invalid resampling: fromRate=${fromRate}, toRate=${toRate}, samples=${samples.length}, newLength=${newLength}`
+      );
     }
 
     const resampled = new Float32Array(newLength);
@@ -721,7 +759,11 @@ export class LPCEncoder {
     return output;
   }
 
-  private applyHighPassFilter(samples: Float32Array, cutoffHz: number, sampleRate: number): Float32Array {
+  private applyHighPassFilter(
+    samples: Float32Array,
+    cutoffHz: number,
+    sampleRate: number
+  ): Float32Array {
     // Simple first-order IIR high-pass filter
     const RC = 1.0 / (cutoffHz * 2 * Math.PI);
     const dt = 1.0 / sampleRate;
@@ -737,7 +779,11 @@ export class LPCEncoder {
     return output;
   }
 
-  private applyLowPassFilter(samples: Float32Array, cutoffHz: number, sampleRate: number): Float32Array {
+  private applyLowPassFilter(
+    samples: Float32Array,
+    cutoffHz: number,
+    sampleRate: number
+  ): Float32Array {
     // Simple first-order IIR low-pass filter
     const RC = 1.0 / (cutoffHz * 2 * Math.PI);
     const dt = 1.0 / sampleRate;
