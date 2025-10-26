@@ -1,6 +1,7 @@
 import './style.css';
 import { initSoundEffects } from './soundEffects';
 import { initMidiExtractor } from './midiExtractor';
+import { initTalkiePlayer } from './talkiePlayer';
 
 // Create the main application structure
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -19,11 +20,16 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <span class="tab-icon">🔊</span>
         <span class="tab-label">Sound Effects</span>
       </button>
+      <button class="tab-button" data-tab="talkie-player">
+        <span class="tab-icon">🤖</span>
+        <span class="tab-label">Talkie Speech</span>
+      </button>
     </nav>
 
     <main class="tab-content">
       <div id="midi-extractor" class="tab-pane active"></div>
       <div id="sound-effects" class="tab-pane"></div>
+      <div id="talkie-player" class="tab-pane"></div>
     </main>
 
     <footer class="app-footer">
@@ -38,12 +44,14 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </div>
 `;
 
-// Initialize both tools
+// Initialize all tools
 const soundEffectsContainer = document.getElementById('sound-effects')!;
 const midiExtractorContainer = document.getElementById('midi-extractor')!;
+const talkiePlayerContainer = document.getElementById('talkie-player')!;
 
 initSoundEffects(soundEffectsContainer);
 initMidiExtractor(midiExtractorContainer);
+initTalkiePlayer(talkiePlayerContainer);
 
 // Tab switching logic
 const tabButtons = document.querySelectorAll('.tab-button');
