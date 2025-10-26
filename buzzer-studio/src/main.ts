@@ -23,11 +23,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       </button>
       <button class="tab-button" data-tab="speech-encoder">
         <span class="tab-icon">🎙️</span>
-        <span class="tab-label">Speech Encoder</span>
+        <span class="tab-label">Talkie (LPC) Encoder</span>
       </button>
       <button class="tab-button" data-tab="talkie-player">
         <span class="tab-icon">🤖</span>
-        <span class="tab-label">Talkie Player</span>
+        <span class="tab-label">Talkie (LPC) Player</span>
       </button>
     </nav>
 
