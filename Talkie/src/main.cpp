@@ -5,6 +5,7 @@
 // #include "vocab/Vocab_US_TI99.h"
 // #include "vocab/spk_spell.h"
 #include "vocab/arnie.h"
+#include "vocab/star_wars.h"
 // #include "vocab/bomb.h"
 #include "Talkie.h"
 #include "player.h"
@@ -18,6 +19,27 @@ void HardFault_Handler(void) __attribute__((interrupt("WCH-Interrupt-fast")));
 #define AUDIO_PWM_GPIO_PIN GPIO_Pin_1 // PA1 (Pin 1 on 8-pin package)
 #define AUDIO_PWM_TIMER TIM1
 #define AUDIO_PWM_CHANNEL 2 // CH2 on TIM1 -> PA1
+
+
+const uint8_t *star_wars_phrases[] = {
+  star_wars::the_force_will_be_with_you,
+  star_wars::red_5_standing_by,
+  star_wars::this_is_red_5_im_going_in,
+  star_wars::im_on_the_leader,
+  star_wars::i_cant_shake_him,
+  star_wars::im_hit_but_not_too_bad_r2_see_what_you_can_do_with_it,
+  star_wars::stay_in_attack_formation,
+  star_wars::r2_try_to_increase_the_power,
+  // star_wars::bleeps,  
+  star_wars::use_the_force_luke,
+  star_wars::the_force_is_strong_with_this_one,
+  star_wars::i_have_you_now,
+  star_wars::ive_lost_r2,
+  star_wars::youre_all_clear_kid,
+  star_wars::yahoo,
+  star_wars::great_shot_kid_that_was_one_in_a_million,
+};  
+
 
 int main(void) {
 #ifdef NVIC_PriorityGroup_2
@@ -119,8 +141,21 @@ int main(void) {
   //   player.play(talkieStream);
   //   Delay_Ms(500);
   // }
-  talkieStream.say(arnie::spARNIE, TALKIE_TMS5100);
-  player.play(talkieStream);
+  // talkieStream.say(star_wars::use_the_force_luke, TALKIE_TMS5220);
+  // player.play(talkieStream);
+  // while (1) {
+  //   // wait for the audio to finish
+  //   if (!talkieStream.hasNext()) {
+  //     break;
+  //   }
+  //   Delay_Ms(500);
+  // }
+  for(uint8_t i = 0; i < sizeof(star_wars_phrases) / sizeof(star_wars_phrases[0]); i++) {
+    talkieStream.say(star_wars_phrases[i], TALKIE_TMS5220);
+    player.play(talkieStream);
+    Delay_Ms(200);
+  }
+  Delay_Ms(1000);
 }
 
 void NMI_Handler(void) {}

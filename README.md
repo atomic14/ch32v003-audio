@@ -22,10 +22,11 @@ This repository contains several firmware projects and development tools:
 ### Development Tools
 
 5. **Buzzer Studio** - Interactive web app for designing 1-bit sound effects and exporting MIDI tracks
-6. **Scripts** - Python tools for audio conversion and ADPCM encoding
 
 
 The **Buzzer Studio** project is available here: https://buzzer-studio.atomic14.com/
+
+A word of warning - the **Buzzer Studio** codebase was creating with a lot of help from AI tools. It all runs client side, there is no backend for anyone to hack. But the code may not always be easy for a human to understand.
 
 ## Quick Start
 
@@ -78,15 +79,8 @@ The app allows you to:
 - Export to C arrays for microcontrollers
 - Export to Python for MicroPython/CircuitPython
 - Choose from preset effects (jump, coin, laser, etc.)
-
-**Python Scripts (Audio Conversion):**
-```bash
-cd scripts
-# Convert WAV to IMA ADPCM C array
-uv run wav_to_adpcm_c.py input.wav
-```
-
-See [scripts/README.md](scripts/README.md) for more conversion tools and options.
+- Play LPC encoded audio
+- Encode WAV files to LPC
 
 
 ## Hardware Requirements

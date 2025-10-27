@@ -1,6 +1,7 @@
 #include <ch32v00x.h>
 // #include "audio/testing_testing_adpcm_2bit.h"
 #include "audio/sorry_dave_adpcm_2bit.h"
+#include "audio/play_a_game.h"
 #include "player.h"
 #include <debug.h>
 #include "ADPCM2BitStream.h"
@@ -34,12 +35,13 @@ int main(void)
     // IMAAdpcmStream imaStream(testing_testing_adpcm, testing_testing_adpcm_len);
 
     // Option 2: 2-bit ADPCM (2 bits/sample, from 8-bit source, 4:1 compression!)
-    ADPCM2BitStream adpcm2bit(sorry_dave_adpcm_2bit, sorry_dave_adpcm_2bit_len);
+    // ADPCM2BitStream adpcm2bit(sorry_dave_adpcm_2bit, sorry_dave_adpcm_2bit_len);
+	ADPCM2BitStream adpcm2bit(play_a_game_adpcm_2bit, play_a_game_adpcm_2bit_len);
 
     // Create player with the stream
     // Player player(&imaStream, AUDIO_PWM_TIMER, AUDIO_PWM_CHANNEL, AUDIO_PWM_GPIO_PORT, AUDIO_PWM_GPIO_PIN);
 	Player player(&adpcm2bit, AUDIO_PWM_TIMER, AUDIO_PWM_CHANNEL, AUDIO_PWM_GPIO_PORT, AUDIO_PWM_GPIO_PIN);
-
+	
 	while(1) {
 		player.play();
 		player.reset();
