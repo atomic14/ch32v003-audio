@@ -6,7 +6,10 @@
 
 A collection of audio projects for the CH32V003J4M6 RISC-V microcontroller, demonstrating various audio synthesis and playback techniques on an 8-pin, $0.10 microcontroller. From simple 1-bit music to compressed audio sample playback and speech synthesis. Click on the image to watch a video and hear the results.
 
-[![$0.10 Music Machine](https://img.youtube.com/vi/RiiS4jjG6ME/0.jpg)](https://www.youtube.com/watch?v=RiiS4jjG6ME)
+[![$0.10 Music Machine](images/mcu-music.jpg)](https://www.youtube.com/watch?v=RiiS4jjG6ME)
+
+[![Talking 10 cent MCU](images/mcu-talks-play.jpg)](https://www.youtube.com/watch?v=RZvX95aXSdM)
+
 
 ## Project Overview
 
