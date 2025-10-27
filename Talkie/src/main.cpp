@@ -7,7 +7,7 @@
 #include "vocab/arnie.h"
 #include "vocab/star_wars.h"
 // #include "vocab/bomb.h"
-#include "Talkie.h"
+#include "TalkieStream.h"
 #include "player.h"
 #include <debug.h>
 #include <stdlib.h>

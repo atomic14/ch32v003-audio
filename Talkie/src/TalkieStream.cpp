@@ -5,7 +5,7 @@
 
 // Modified for CH32V003J4M6 by @atomic14
 
-#include "Talkie.h"
+#include "TalkieStream.h"
 
 #define FS 8000 // Speech engine sample rate (8KHz)
 
@@ -228,7 +228,7 @@ void TalkieStream::processNextFrame() {
   if (energy == FRAME_TYPE_SILENCE) {
     // Rest frame: Silence for this 25ms frame
     synthEnergy = 0;
-
+    synthPeriod = 0;
   } else if (energy == FRAME_TYPE_STOP) {
     // Stop frame: End of speech - silence all coefficients and mark as finished
     synthEnergy = 0;
@@ -266,7 +266,11 @@ void TalkieStream::processNextFrame() {
         synthK8 = tmsK8[deviceIndex][getBits(3)];
         synthK9 = tmsK9[deviceIndex][getBits(3)];
         synthK10 = tmsK10[deviceIndex][getBits(3)];
+      } else {
+        synthK5 = synthK6 = synthK7 = synthK8 = synthK9 = synthK10 = 0;
       }
+    } else if (!synthPeriod) {
+      synthK5 = synthK6 = synthK7 = synthK8 = synthK9 = synthK10 = 0;
     }
   }
 }
@@ -311,17 +315,14 @@ int16_t TalkieStream::nextSample() {
   if (synthPeriod) {
     // VOICED: Use periodic chirp waveform (for vowel-like sounds)
     // Advance through pitch period
-    if (periodCounter < synthPeriod) {
-      periodCounter++;
+    uint8_t idx = periodCounter;
+    periodCounter++;
+    if (periodCounter >= synthPeriod) periodCounter = 0;
+    
+    if (idx < sizeof(chirp)) {
+      u10 = ((int8_t)chirp[idx] * (int32_t)synthEnergy) >> ENERGY_SHIFT;
     } else {
-      periodCounter = 0; // Reset for next period
-    }
-
-    // Use chirp table for the beginning of the period, silence after
-    if (periodCounter < sizeof(chirp)) {
-      u10 = ((chirp[periodCounter]) * (uint32_t)synthEnergy) >> ENERGY_SHIFT;
-    } else {
-      u10 = 0; // Silence until next period
+      u10 = 0;
     }
   } else {
     // UNVOICED: Use white noise (for consonant-like sounds)
