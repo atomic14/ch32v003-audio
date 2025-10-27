@@ -6,7 +6,8 @@
 
 static const uint32_t SAMPLE_PERIOD_US = (1000000UL / FS_HZ);
 
-Player::Player(AudioStream *stream, TIM_TypeDef *timer, int pwm_channel, GPIO_TypeDef *pwm_gpio_port, int pwm_gpio_pin) {
+template<typename T>
+Player<T>::Player(T *stream, TIM_TypeDef *timer, int pwm_channel, GPIO_TypeDef *pwm_gpio_port, int pwm_gpio_pin) {
     this->audio_stream = stream;
     this->timer = timer;
     this->pwm_channel = pwm_channel;
@@ -15,7 +16,8 @@ Player::Player(AudioStream *stream, TIM_TypeDef *timer, int pwm_channel, GPIO_Ty
     audio_pwm_init();
 }
 
-void Player::audio_pwm_init() {
+template<typename T>
+void Player<T>::audio_pwm_init() {
     // Clocks - determine which GPIO port clock to enable
     uint32_t gpio_clock = 0;
     if (this->pwm_gpio_port == GPIOA) gpio_clock = RCC_APB2Periph_GPIOA;
@@ -79,8 +81,8 @@ void Player::audio_pwm_init() {
     TIM_Cmd(TIM2, ENABLE);
 }
 
-
-void Player::play() {
+template<typename T>
+void Player<T>::play() {
     // Reset TIM2 counter for consistent timing on each playback
     TIM_SetCounter(TIM2, 0);
 
@@ -113,6 +115,7 @@ void Player::play() {
     }
 }
 
-void Player::reset() {
+template<typename T>
+void Player<T>::reset() {
     audio_stream->reset();
 }

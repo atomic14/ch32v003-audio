@@ -35,8 +35,7 @@ int main(void)
     // IMAAdpcmStream imaStream(testing_testing_adpcm, testing_testing_adpcm_len);
 
     // Option 2: 2-bit ADPCM (2 bits/sample, from 8-bit source, 4:1 compression!)
-    // ADPCM2BitStream adpcm2bit(sorry_dave_adpcm_2bit, sorry_dave_adpcm_2bit_len);
-	ADPCM2BitStream adpcm2bit(play_a_game_adpcm_2bit, play_a_game_adpcm_2bit_len);
+    ADPCM2BitStream adpcm2bit(sorry_dave_adpcm_2bit, sorry_dave_adpcm_2bit_len);
 
     // Create player with the stream
     // Player player(&imaStream, AUDIO_PWM_TIMER, AUDIO_PWM_CHANNEL, AUDIO_PWM_GPIO_PORT, AUDIO_PWM_GPIO_PIN);

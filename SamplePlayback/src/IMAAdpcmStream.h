@@ -1,15 +1,14 @@
 #pragma once
 #include <stdint.h>
-#include "AudioStream.h"
 
-class IMAAdpcmStream : public AudioStream {
+class IMAAdpcmStream {
 public:
     IMAAdpcmStream(const uint8_t* data, uint32_t length)
         : data(data), length(length), byteIndex(0), nibbleHigh(false),
           predictor(0), stepIndex(0) {}
 
     // Reset to beginning (override from AudioStream)
-    void reset() override {
+    void reset() {
         byteIndex = 0;
         nibbleHigh = false;
         predictor = 0;
@@ -17,13 +16,13 @@ public:
     }
 
     // Returns true if more samples are available (override from AudioStream)
-    bool hasNext() const override {
+    bool hasNext() const {
         return byteIndex < length;
     }
 
     // Decode and return the next PCM sample (16-bit) (override from AudioStream)
     // WARNING: Calling this when hasNext() returns false will return 0
-    int16_t nextSample() override {
+    int16_t nextSample() {
         // Bounds check - return 0 if we've exhausted the stream
         if (byteIndex >= length) {
             return 0;
