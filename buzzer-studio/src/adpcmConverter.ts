@@ -1,3 +1,11 @@
+// Extend the Window interface to include our custom properties
+interface AdpcmWindow extends Window {
+  adpcmHeaderCode?: string;
+  adpcmCppCode?: string;
+}
+
+declare const window: AdpcmWindow;
+
 export function initAdpcmConverter(container: HTMLElement) {
   let audioContext: AudioContext | null = null;
   let originalAudioBuffer: AudioBuffer | null = null;
@@ -113,7 +121,7 @@ export function initAdpcmConverter(container: HTMLElement) {
     uploadArea.classList.remove('drag-over');
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
-      handleFile(files[0]);
+      void handleFile(files[0]);
     }
   });
 
@@ -121,7 +129,7 @@ export function initAdpcmConverter(container: HTMLElement) {
   audioFileInput.addEventListener('change', (e) => {
     const files = (e.target as HTMLInputElement).files;
     if (files && files.length > 0) {
-      handleFile(files[0]);
+      void handleFile(files[0]);
     }
   });
 
@@ -174,10 +182,9 @@ export function initAdpcmConverter(container: HTMLElement) {
       // Show sections
       waveformSection.style.display = 'block';
       exportSection.style.display = 'block';
-
     } catch (error) {
       console.error('Error processing audio:', error);
-      statusInfo.innerHTML = `<p style="color: var(--error-color);">❌ Error: ${error}</p>`;
+      statusInfo.innerHTML = `<p style="color: var(--error-color);">❌ Error: ${String(error)}</p>`;
     }
   }
 
@@ -248,8 +255,8 @@ export function initAdpcmConverter(container: HTMLElement) {
       }
 
       // Pack the 2-bit code into current byte
-      const shift = 6 - (sampleInByte * 2);
-      currentByte |= (code << shift);
+      const shift = 6 - sampleInByte * 2;
+      currentByte |= code << shift;
 
       // Calculate delta (same as decoder)
       let delta: number;
@@ -301,7 +308,7 @@ export function initAdpcmConverter(container: HTMLElement) {
     for (const byte of encodedData) {
       // Extract 4 samples from the byte
       for (let i = 0; i < 4; i++) {
-        const shift = 6 - (i * 2);
+        const shift = 6 - i * 2;
         const code = (byte >> shift) & 0x03;
 
         const step = stepTable[stepIndex];
@@ -405,8 +412,8 @@ export function initAdpcmConverter(container: HTMLElement) {
     const cppCode = generateCppCode(arrayName, encodedData);
 
     // Store for preview
-    (window as any).adpcmHeaderCode = headerCode;
-    (window as any).adpcmCppCode = cppCode;
+    window.adpcmHeaderCode = headerCode;
+    window.adpcmCppCode = cppCode;
 
     // Show header by default
     showCodePreview('header');
@@ -430,7 +437,8 @@ extern const unsigned int ${arrayName}_len;
     // Format data in rows of 16 bytes
     for (let i = 0; i < data.length; i += 16) {
       const chunk = Array.from(data.slice(i, i + 16));
-      code += '    ' + chunk.map(b => `0x${b.toString(16).toUpperCase().padStart(2, '0')}`).join(', ');
+      code +=
+        '    ' + chunk.map((b) => `0x${b.toString(16).toUpperCase().padStart(2, '0')}`).join(', ');
       if (i + 16 < data.length) {
         code += ',';
       }
@@ -445,14 +453,12 @@ extern const unsigned int ${arrayName}_len;
 
   // Show code preview
   function showCodePreview(type: 'header' | 'cpp') {
-    const code = type === 'header'
-      ? (window as any).adpcmHeaderCode
-      : (window as any).adpcmCppCode;
+    const code = type === 'header' ? window.adpcmHeaderCode : window.adpcmCppCode;
 
-    codePreview.textContent = code;
+    codePreview.textContent = code ?? '';
 
     // Update active tab
-    container.querySelectorAll('.tab-btn').forEach(btn => {
+    container.querySelectorAll('.tab-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.getAttribute('data-preview') === type);
     });
   }
@@ -460,24 +466,24 @@ extern const unsigned int ${arrayName}_len;
   // Play audio buttons
   container.querySelector('#playOriginalBtn')?.addEventListener('click', () => {
     if (processedAudioData && audioContext) {
-      playAudio(processedAudioData);
+      void playAudio(processedAudioData);
     }
   });
 
   container.querySelector('#playDecodedBtn')?.addEventListener('click', () => {
     if (decodedData && audioContext) {
-      playAudio(decodedData);
+      void playAudio(decodedData);
     }
   });
 
   // Play audio data
-  async function playAudio(data: Uint8Array) {
+  function playAudio(data: Uint8Array) {
     if (!audioContext) return;
 
     // Convert 8-bit unsigned to float32
     const float32Data = new Float32Array(data.length);
     for (let i = 0; i < data.length; i++) {
-      float32Data[i] = (data[i] / 127.5) - 1;
+      float32Data[i] = data[i] / 127.5 - 1;
     }
 
     // Create audio buffer
@@ -492,7 +498,7 @@ extern const unsigned int ${arrayName}_len;
   }
 
   // Code preview tabs
-  container.querySelectorAll('.tab-btn').forEach(btn => {
+  container.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       const previewType = btn.getAttribute('data-preview') as 'header' | 'cpp';
       showCodePreview(previewType);
@@ -501,13 +507,17 @@ extern const unsigned int ${arrayName}_len;
 
   // Download buttons
   container.querySelector('#downloadHeaderBtn')?.addEventListener('click', () => {
-    const code = (window as any).adpcmHeaderCode;
-    downloadFile(`${fileName}_adpcm_2bit.h`, code);
+    const code = window.adpcmHeaderCode;
+    if (code) {
+      downloadFile(`${fileName}_adpcm_2bit.h`, code);
+    }
   });
 
   container.querySelector('#downloadCppBtn')?.addEventListener('click', () => {
-    const code = (window as any).adpcmCppCode;
-    downloadFile(`${fileName}_adpcm_2bit.cpp`, code);
+    const code = window.adpcmCppCode;
+    if (code) {
+      downloadFile(`${fileName}_adpcm_2bit.cpp`, code);
+    }
   });
 
   // Download file helper

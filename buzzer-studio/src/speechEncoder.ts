@@ -53,7 +53,7 @@ export function initSpeechEncoder(container: HTMLElement): void {
           <div class="settings-grid">
             <div class="setting-group">
               <label>
-                <input type="checkbox" id="high-pass-filter" class="setting-checkbox" checked />
+                <input type="checkbox" id="high-pass-filter" class="setting-checkbox" />
                 <span>High-Pass Filter</span>
               </label>
               <p class="setting-hint">Removes low-frequency rumble, handling noise, and AC hum.</p>
@@ -69,7 +69,7 @@ export function initSpeechEncoder(container: HTMLElement): void {
 
             <div class="setting-group">
               <label>
-                <input type="checkbox" id="low-pass-filter" class="setting-checkbox" checked />
+                <input type="checkbox" id="low-pass-filter" class="setting-checkbox" />
                 <span>Low-Pass Filter</span>
               </label>
               <p class="setting-hint">Removes high-frequency noise above speech range.</p>
