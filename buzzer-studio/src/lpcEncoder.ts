@@ -472,6 +472,9 @@ export class LPCEncoder {
       const windowEnd = Math.min(samples.length, windowStart + analysisWindowSize);
       const frame = samples.slice(windowStart, windowEnd);
 
+      // Extract hop-sized segment for per-frame RMS estimation (matches synth frame length)
+      const hopSegment = samples.slice(i, i + frameSize);
+
       // Apply Hamming window
       const windowed = this.applyHammingWindow(frame);
 
@@ -496,6 +499,14 @@ export class LPCEncoder {
       } else if (reflector.isUnvoiced() && this.settings.normalizeUnvoiced) {
         // Normalize unvoiced frames to consistent RMS
         reflector.rms = this.codingTable.rms[6]; // Lower energy for unvoiced
+      } else {
+        // Default: drive energy from original (pre-LPC) hop segment RMS
+        reflector.rms = Reflector.formattedRMS(
+          // original energy = sum of squares; reuse helper scaling with sqrt(energy/numSamples)
+          // (autocorr[0] is energy of the windowed frame; we intentionally use unwindowed hop)
+          hopSegment.reduce((acc, v) => acc + v * v, 0),
+          hopSegment.length
+        );
       }
 
       // Create frame data
