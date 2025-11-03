@@ -61,6 +61,16 @@ export function initTalkiePlayer(container: HTMLElement): void {
 
       <div class="section">
         <h3>Waveform Preview</h3>
+        <div class="waveform-controls">
+          <label class="checkbox-label">
+            <input type="checkbox" id="normalize-waveform" checked />
+            Normalize waveform display
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="apply-deemphasis" />
+            Apply output de-emphasis filter
+          </label>
+        </div>
         <div class="waveform-container">
           <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
           <div id="waveform-loading" class="waveform-loading hidden">
@@ -82,8 +92,13 @@ export function initTalkiePlayer(container: HTMLElement): void {
   const statusDiv = container.querySelector<HTMLDivElement>('#status')!;
   const loadingDiv = container.querySelector<HTMLDivElement>('#waveform-loading')!;
   const sampleButtons = container.querySelectorAll<HTMLButtonElement>('.sample-btn');
+  const normalizeCheckbox = container.querySelector<HTMLInputElement>('#normalize-waveform')!;
+  const deemphasisCheckbox = container.querySelector<HTMLInputElement>('#apply-deemphasis')!;
 
   const ctx = canvas.getContext('2d')!;
+
+  // Store current waveform data for re-rendering
+  let currentWaveformData: Float32Array | null = null;
 
   function showLoading(): void {
     loadingDiv.classList.remove('hidden');
@@ -130,7 +145,7 @@ export function initTalkiePlayer(container: HTMLElement): void {
         const device = parseInt(deviceSelect.value) as TalkieDeviceType;
         const stream = new TalkieStream();
         stream.say(hexData, device);
-        const samples = stream.generateAllSamples();
+        const samples = stream.generateAllSamples(deemphasisCheckbox.checked);
 
         hideLoading();
 
@@ -148,11 +163,13 @@ export function initTalkiePlayer(container: HTMLElement): void {
           return;
         }
 
-        drawWaveform(samples);
+        currentWaveformData = samples;
+        drawWaveform(samples, normalizeCheckbox.checked);
       } catch (error) {
         console.error('Waveform generation error:', error);
         hideLoading();
         clearCanvas();
+        currentWaveformData = null;
         showStatus(
           'Error generating waveform. Try switching device type (TMS5220 ↔ TMS5100)',
           'error'
@@ -192,6 +209,20 @@ export function initTalkiePlayer(container: HTMLElement): void {
     }
   });
 
+  // Update waveform when normalization checkbox changes
+  normalizeCheckbox.addEventListener('change', () => {
+    if (currentWaveformData) {
+      drawWaveform(currentWaveformData, normalizeCheckbox.checked);
+    }
+  });
+
+  // Update waveform when de-emphasis checkbox changes
+  deemphasisCheckbox.addEventListener('change', () => {
+    if (hexInput.value.trim()) {
+      generateWaveformPreview();
+    }
+  });
+
   function showStatus(message: string, type: 'info' | 'error' | 'success'): void {
     statusDiv.textContent = message;
     statusDiv.className = `status ${type}`;
@@ -201,7 +232,7 @@ export function initTalkiePlayer(container: HTMLElement): void {
     }, 3000);
   }
 
-  function drawWaveform(audioData: Float32Array): void {
+  function drawWaveform(audioData: Float32Array, normalize: boolean = false): void {
     // Get the display size from the canvas element
     const displayWidth = canvas.clientWidth;
     const displayHeight = canvas.clientHeight;
@@ -229,6 +260,20 @@ export function initTalkiePlayer(container: HTMLElement): void {
     const step = Math.ceil(audioData.length / displayWidth);
     const amp = displayHeight / 2;
 
+    // Calculate normalization factor if needed
+    let normalizationFactor = 1.0;
+    if (normalize) {
+      // Find the maximum absolute value in the data
+      let maxAbsValue = 0;
+      for (let i = 0; i < audioData.length; i++) {
+        maxAbsValue = Math.max(maxAbsValue, Math.abs(audioData[i]));
+      }
+      // Normalize to 90% of full scale to avoid clipping at edges
+      if (maxAbsValue > 0) {
+        normalizationFactor = 0.9 / maxAbsValue;
+      }
+    }
+
     for (let i = 0; i < displayWidth; i++) {
       const startIdx = i * step;
       const endIdx = Math.min((i + 1) * step, audioData.length);
@@ -236,8 +281,17 @@ export function initTalkiePlayer(container: HTMLElement): void {
 
       if (slice.length === 0) continue;
 
-      const min = Math.min(...Array.from(slice));
-      const max = Math.max(...Array.from(slice));
+      // Calculate min/max without spread operator to avoid stack overflow
+      let min = slice[0];
+      let max = slice[0];
+      for (let j = 1; j < slice.length; j++) {
+        if (slice[j] < min) min = slice[j];
+        if (slice[j] > max) max = slice[j];
+      }
+
+      // Apply normalization
+      min *= normalizationFactor;
+      max *= normalizationFactor;
 
       if (i === 0) {
         ctx.moveTo(i, amp - min * amp);
@@ -300,7 +354,7 @@ export function initTalkiePlayer(container: HTMLElement): void {
       stream.say(hexData, device);
 
       // Generate all samples
-      const samples = stream.generateAllSamples();
+      const samples = stream.generateAllSamples(deemphasisCheckbox.checked);
 
       if (samples.length === 0) {
         showStatus('No audio generated. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
@@ -315,7 +369,8 @@ export function initTalkiePlayer(container: HTMLElement): void {
       }
 
       // Draw waveform
-      drawWaveform(samples);
+      currentWaveformData = samples;
+      drawWaveform(samples, normalizeCheckbox.checked);
 
       // Create audio buffer
       const audioBuffer = audioContext.createBuffer(1, samples.length, stream.getSampleRate());

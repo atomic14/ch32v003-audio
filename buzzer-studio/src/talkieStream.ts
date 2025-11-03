@@ -332,7 +332,7 @@ export class TalkieStream {
   }
 
   // Generate all samples and return as Float32Array for Web Audio API
-  generateAllSamples(): Float32Array {
+  generateAllSamples(applyDeemphasis: boolean = false): Float32Array {
     const samples: number[] = [];
     while (this.hasNext()) {
       samples.push(this.nextSample());
@@ -342,6 +342,18 @@ export class TalkieStream {
     const float32 = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) {
       float32[i] = samples[i] / 32768.0;
+    }
+
+    // Apply output de-emphasis filter if requested
+    // This compensates for pre-emphasis applied during encoding
+    // Standard de-emphasis formula: sample(i) * 0.07 + prev * 0.93
+    if (applyDeemphasis) {
+      let prev = 0;
+      for (let i = 0; i < float32.length; i++) {
+        const current = float32[i] * 0.07 + prev * 0.93;
+        float32[i] = current;
+        prev = current;
+      }
     }
 
     return float32;
