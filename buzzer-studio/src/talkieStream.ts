@@ -300,7 +300,10 @@ export class TalkieStream {
       }
     } else {
       this.synthRand = (this.synthRand >> 1) ^ (this.synthRand & 1 ? NOISE_POLY : 0);
-      u10 = this.synthRand & 1 ? this.synthEnergy : -this.synthEnergy;
+      // Unvoiced frames use a fixed noise amplitude (64 or -64) scaled by energy
+      // This matches the TMS5220 patent: "half of the maximum value in the chirp table"
+      const noiseVal = this.synthRand & 1 ? 64 : -64;
+      u10 = Math.floor((noiseVal * this.synthEnergy) / (1 << ENERGY_SHIFT));
     }
 
     const u9 = u10 - Math.floor((this.synthK10 * this.x9) / (1 << K3_K10_SHIFT));
