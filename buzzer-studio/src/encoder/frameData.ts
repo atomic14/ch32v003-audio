@@ -12,6 +12,7 @@ export class FrameData {
   public codingTable: CodingTable;
   public pitch: number;
   public repeat: boolean;
+  public voicedOverride: boolean | null = null;
 
   constructor(reflector: Reflector, pitch: number, repeat: boolean) {
     this.reflector = reflector;
@@ -53,7 +54,7 @@ export class FrameData {
         }
 
         // K5-K10 (only for voiced frames)
-        if (parameters['kParameterPitch'] !== 0 && this.reflector.isVoiced()) {
+        if (parameters['kParameterPitch'] !== 0 && this.isVoiced()) {
           for (let k = 5; k <= 10; k++) {
             parameters[`kParameterK${k}`] = this.parameterizedValueForK(this.reflector.ks[k], k);
           }
@@ -74,12 +75,17 @@ export class FrameData {
   }
 
   private parameterizedValueForPitch(pitch: number): number {
-    if (this.reflector.isUnvoiced() || pitch === 0) {
+    if (!this.isVoiced() || pitch === 0) {
       return 0;
     }
     const index = findClosestValue(pitch, this.codingTable.pitch);
     if (index > 63) return 63;
     if (index < 0) return 0;
     return index;
+  }
+
+  private isVoiced(): boolean {
+    if (this.voicedOverride !== null) return this.voicedOverride;
+    return this.reflector.isVoiced();
   }
 }

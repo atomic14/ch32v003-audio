@@ -77,9 +77,10 @@ export class Reflector {
     const k = new Array<number>(11).fill(0);
     const b = new Array<number>(11).fill(0);
     const d = new Array<number>(12).fill(0);
+    const epsilon = 1e-12;
 
     // Initialize
-    k[1] = -r[1] / r[0];
+    k[1] = -r[1] / (Math.abs(r[0]) > epsilon ? r[0] : (r[0] >= 0 ? epsilon : -epsilon));
     d[1] = r[1];
     d[2] = r[0] + k[1] * r[1];
 
@@ -97,14 +98,25 @@ export class Reflector {
         j += 1;
       }
 
-      k[i] = -y / d[i];
+      const denom = Math.abs(d[i]) > epsilon && isFinite(d[i]) ? d[i] : (d[i] >= 0 ? epsilon : -epsilon);
+      k[i] = -y / denom;
+      if (!isFinite(k[i])) k[i] = 0;
+      if (k[i] > 0.999) k[i] = 0.999;
+      if (k[i] < -0.999) k[i] = -0.999;
       d[i + 1] = d[i] + k[i] * y;
       d[i] = b[i];
+      if (!isFinite(d[i + 1]) || d[i + 1] <= 0) {
+        for (let t = i + 1; t <= 10; t++) {
+          k[t] = 0;
+        }
+        break;
+      }
       i += 1;
     }
 
     // Calculate RMS from final residual energy d[11]
-    const rms = Reflector.formattedRMS(d[11], numberOfSamples);
+    const finalResidual = isFinite(d[11]) && d[11] > 0 ? d[11] : 0;
+    const rms = Reflector.formattedRMS(finalResidual, numberOfSamples);
 
     return new Reflector(codingTable, unvoicedThreshold, k, rms, true);
   }

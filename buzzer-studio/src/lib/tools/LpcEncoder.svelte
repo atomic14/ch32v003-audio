@@ -48,13 +48,20 @@
   let trimSilence = $state(false);
   let includeHexPrefix = $state(true);
   let explicitStop = $state(true);
-  let tablesVariant = $state<'tms5220' | 'tms5100'>('tms5100');
+  let tablesVariant = $state<'tms5220' | 'tms5100'>('tms5220');
   let startSample = $state(0);
   let endSample = $state(0);
   let minEnergyThreshold = $state(0.0001);
   let energyRatioThreshold = $state(1.2);
   let pitchQualityThreshold = $state(0.5);
   let applyDeemphasisEncoder = $state(false);
+  // Input conditioning
+  let removeDC = $state(true);
+  let peakNormalize = $state(false);
+  let medianFilterWindow = $state(0);
+  let noiseGateEnable = $state(false);
+  let noiseGateThreshold = $state(0.02);
+  let noiseGateKnee = $state(2.0);
 
   // Computed
   let showResults = $derived(encodedHex !== '');
@@ -87,6 +94,12 @@
       speed,
       gain,
       rawExcitation,
+      removeDC,
+      peakNormalize,
+      medianFilterWindow,
+      noiseGateEnable,
+      noiseGateThreshold,
+      noiseGateKnee,
       trimSilence,
       includeHexPrefix,
       startSample,
@@ -603,6 +616,7 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
       minFrequency, maxFrequency, submultipleThreshold, pitchValue, pitchOffset,
       unvoicedThreshold, frameRate, preEmphasisAlpha, voicedRmsLimit, unvoicedRmsLimit,
       unvoicedMultiplier, highpassCutoff, lowpassCutoff, windowWidth, speed, gain,
+      removeDC, peakNormalize, medianFilterWindow, noiseGateEnable, noiseGateThreshold, noiseGateKnee,
       startSample, endSample, minEnergyThreshold, energyRatioThreshold, pitchQualityThreshold,
       preEmphasis, normalizeVoiced, normalizeUnvoiced, overridePitch, rawExcitation,
       trimSilence, explicitStop, tablesVariant, applyDeemphasisEncoder
@@ -744,6 +758,71 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
         <summary class="advanced-settings-summary">⚙️ Advanced Settings</summary>
         <div class="advanced-settings-content">
           <div class="settings-grid settings-grid-3col">
+            <div class="setting-group">
+              <label>
+                <input type="checkbox" bind:checked={removeDC} class="setting-checkbox" />
+                <span>Remove DC Offset</span>
+              </label>
+            </div>
+
+            <div class="setting-group">
+              <label>
+                <input type="checkbox" bind:checked={peakNormalize} class="setting-checkbox" />
+                <span>Peak Normalize (pre-analysis)</span>
+              </label>
+            </div>
+
+            <div class="setting-group">
+              <label>
+                <span>Median Filter (0=off)</span>
+                <input
+                  type="number"
+                  bind:value={medianFilterWindow}
+                  class="setting-input"
+                  min="0"
+                  max="21"
+                  step="1"
+                />
+              </label>
+            </div>
+
+            <div class="setting-group">
+              <label>
+                <input type="checkbox" bind:checked={noiseGateEnable} class="setting-checkbox" />
+                <span>Noise Gate</span>
+              </label>
+              <div class="slider-combo">
+                <span class="tooltip-label">Threshold</span>
+                <input
+                  type="range"
+                  bind:value={noiseGateThreshold}
+                  class="setting-slider"
+                  min="0"
+                  max="0.1"
+                  step="0.005"
+                />
+                <input
+                  type="number"
+                  bind:value={noiseGateThreshold}
+                  class="setting-input-small"
+                  min="0"
+                  max="0.2"
+                  step="0.001"
+                />
+              </div>
+              <div class="slider-combo">
+                <span class="tooltip-label">Knee</span>
+                <input
+                  type="range"
+                  bind:value={noiseGateKnee}
+                  class="setting-slider"
+                  min="1"
+                  max="6"
+                  step="0.5"
+                />
+                <span>{noiseGateKnee.toFixed(1)}</span>
+              </div>
+            </div>
             <div class="setting-group">
               <label>
                 <span>Min Frequency (Hz)</span>

@@ -221,6 +221,29 @@ export function applyMedianFilter(samples: Float32Array, windowSize: number): Fl
 }
 
 /**
+ * Soft noise gate with smooth knee.
+ * Attenuates samples below a threshold without hard-clipping to zero.
+ * threshold: linear amplitude in [0, 1], knee controls curvature (>1 = softer).
+ */
+export function applySoftNoiseGate(
+  samples: Float32Array,
+  threshold: number,
+  knee: number = 2.0
+): Float32Array {
+  if (threshold <= 0) return samples;
+  const out = new Float32Array(samples.length);
+  const thr = Math.max(1e-6, Math.min(1.0, threshold));
+  const k = Math.max(1.0, knee);
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i];
+    const mag = Math.abs(s);
+    const g = mag >= thr ? 1.0 : Math.pow(mag / thr, k);
+    out[i] = s * g;
+  }
+  return out;
+}
+
+/**
  * Resample audio using linear interpolation
  */
 export function resample(samples: Float32Array, fromRate: number, toRate: number): Float32Array {
