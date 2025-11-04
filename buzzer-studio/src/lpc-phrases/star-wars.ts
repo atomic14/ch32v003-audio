@@ -1,5 +1,5 @@
 export default {
-    nane: "Star Wars",
+    name: "Star Wars",
     tables: "TMS5220",
     phrases: {
         "use_the_force_luke": [
