@@ -15,9 +15,189 @@
   let hexInput = $state('');
   let deviceType = $state<TalkieDeviceType>(0);
   let isPlaying = $state(false);
+  let canvas = $state<HTMLCanvasElement>();
+  let currentWaveformData = $state<Float32Array | null>(null);
+  let isGenerating = $state(false);
+  let normalizeWaveform = $state(true);
+  let applyDeemphasis = $state(false);
+  let statusMessage = $state('');
+  let statusType = $state<'info' | 'error' | 'success'>('info');
+
+  // Generate waveform when hex input or device type changes
+  let debounceTimer: number | undefined;
+  $effect(() => {
+    // Watch these values
+    const watchedValues = [hexInput, deviceType, applyDeemphasis];
+
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+    }
+
+    debounceTimer = setTimeout(() => {
+      generateWaveformPreview();
+    }, 500);
+  });
+
+  // Redraw waveform when normalization changes
+  $effect(() => {
+    if (currentWaveformData && canvas && normalizeWaveform !== undefined) {
+      drawWaveform(currentWaveformData, normalizeWaveform);
+    }
+  });
 
   function loadSamplePhrase(phraseName: string) {
     hexInput = SAMPLE_PHRASES[phraseName] || '';
+    showStatus(`Loaded: ${phraseName}`, 'info');
+  }
+
+  function showStatus(message: string, type: 'info' | 'error' | 'success') {
+    statusMessage = message;
+    statusType = type;
+    setTimeout(() => {
+      statusMessage = '';
+    }, 3000);
+  }
+
+  function clearCanvas() {
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    const displayWidth = canvas.clientWidth;
+    const displayHeight = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
+  }
+
+  function generateWaveformPreview() {
+    const hexString = hexInput.trim();
+    if (!hexString) {
+      clearCanvas();
+      currentWaveformData = null;
+      return;
+    }
+
+    const hexData = parseHexString(hexString);
+    if (!hexData) {
+      clearCanvas();
+      currentWaveformData = null;
+      showStatus('Invalid hex data format', 'error');
+      return;
+    }
+
+    isGenerating = true;
+
+    // Use setTimeout to allow UI to update
+    setTimeout(() => {
+      try {
+        const stream = new TalkieStream();
+        stream.say(hexData, deviceType);
+        const samples = stream.generateAllSamples(applyDeemphasis);
+
+        if (samples.length === 0) {
+          clearCanvas();
+          currentWaveformData = null;
+          showStatus('No audio generated. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+          isGenerating = false;
+          return;
+        }
+
+        // Check if the audio seems too short (likely wrong device type)
+        const durationSeconds = samples.length / stream.getSampleRate();
+        if (durationSeconds < 0.1) {
+          clearCanvas();
+          currentWaveformData = null;
+          showStatus('Audio too short. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+          isGenerating = false;
+          return;
+        }
+
+        currentWaveformData = samples;
+        drawWaveform(samples, normalizeWaveform);
+        isGenerating = false;
+      } catch (error) {
+        console.error('Waveform generation error:', error);
+        clearCanvas();
+        currentWaveformData = null;
+        showStatus('Error generating waveform. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+        isGenerating = false;
+      }
+    }, 10);
+  }
+
+  function drawWaveform(audioData: Float32Array, normalize: boolean = false) {
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d')!;
+    const displayWidth = canvas.clientWidth;
+    const displayHeight = canvas.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+    ctx.scale(dpr, dpr);
+
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+    // Draw background
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
+
+    // Draw waveform
+    ctx.strokeStyle = '#00ff88';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+
+    const step = Math.ceil(audioData.length / displayWidth);
+    const amp = displayHeight / 2;
+
+    // Calculate normalization factor if needed
+    let normalizationFactor = 1.0;
+    if (normalize) {
+      let maxAbsValue = 0;
+      for (let i = 0; i < audioData.length; i++) {
+        maxAbsValue = Math.max(maxAbsValue, Math.abs(audioData[i]));
+      }
+      if (maxAbsValue > 0) {
+        normalizationFactor = 0.9 / maxAbsValue;
+      }
+    }
+
+    for (let i = 0; i < displayWidth; i++) {
+      const startIdx = i * step;
+      const endIdx = Math.min((i + 1) * step, audioData.length);
+      const slice = audioData.slice(startIdx, endIdx);
+
+      if (slice.length === 0) continue;
+
+      let min = slice[0];
+      let max = slice[0];
+      for (let j = 1; j < slice.length; j++) {
+        if (slice[j] < min) min = slice[j];
+        if (slice[j] > max) max = slice[j];
+      }
+
+      min *= normalizationFactor;
+      max *= normalizationFactor;
+
+      if (i === 0) {
+        ctx.moveTo(i, amp - min * amp);
+      }
+      ctx.lineTo(i, amp - max * amp);
+      ctx.lineTo(i, amp - min * amp);
+    }
+
+    ctx.stroke();
+
+    // Draw center line
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, amp);
+    ctx.lineTo(displayWidth, amp);
+    ctx.stroke();
   }
 
   async function play() {
@@ -26,16 +206,50 @@
       return;
     }
 
+    const hexString = hexInput.trim();
+    if (!hexString) {
+      showStatus('Please paste hex data first', 'error');
+      return;
+    }
+
+    const hexData = parseHexString(hexString);
+    if (!hexData) {
+      showStatus('Invalid hex data format', 'error');
+      return;
+    }
+
     try {
       if (!audioContext) {
         audioContext = new AudioContext();
       }
 
-      const hexData = parseHexString(hexInput);
-      const stream = new TalkieStream();
-      const samples = stream.synthesize(hexData, deviceType);
+      // Resume audio context if needed (browser autoplay policy)
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
 
-      const audioBuffer = audioContext.createBuffer(1, samples.length, 8000);
+      const stream = new TalkieStream();
+      stream.say(hexData, deviceType);
+      const samples = stream.generateAllSamples(applyDeemphasis);
+
+      if (samples.length === 0) {
+        showStatus('No audio generated. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+        return;
+      }
+
+      // Check if the audio seems too short (likely wrong device type)
+      const durationSeconds = samples.length / stream.getSampleRate();
+      if (durationSeconds < 0.1) {
+        showStatus('Audio too short. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+        return;
+      }
+
+      // Update waveform
+      currentWaveformData = samples;
+      drawWaveform(samples, normalizeWaveform);
+
+      // Create audio buffer
+      const audioBuffer = audioContext.createBuffer(1, samples.length, stream.getSampleRate());
       audioBuffer.copyToChannel(samples, 0);
 
       currentSource = audioContext.createBufferSource();
@@ -45,23 +259,46 @@
       currentSource.onended = () => {
         isPlaying = false;
         currentSource = null;
+        showStatus('Playback complete', 'success');
       };
 
       currentSource.start();
       isPlaying = true;
+      showStatus(`Playing (${durationSeconds.toFixed(1)}s, ${samples.length} samples)`, 'info');
     } catch (error) {
-      alert(`Error: ${String(error)}`);
+      console.error('Playback error:', error);
+      showStatus('Playback error. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
       isPlaying = false;
     }
   }
 
   function stop() {
     if (currentSource) {
-      currentSource.stop();
+      try {
+        currentSource.stop();
+      } catch {
+        // Already stopped
+      }
       currentSource = null;
     }
     isPlaying = false;
   }
+
+  // Listen for data from encoder
+  $effect(() => {
+    function handleLoadTalkieData(event: Event) {
+      const customEvent = event as CustomEvent;
+      hexInput = customEvent.detail;
+      showStatus('Received data from encoder!', 'success');
+      generateWaveformPreview();
+    }
+
+    window.addEventListener('loadTalkieData', handleLoadTalkieData);
+
+    return () => {
+      window.removeEventListener('loadTalkieData', handleLoadTalkieData);
+    };
+  });
 </script>
 
 <div class="tool-content">
@@ -104,7 +341,182 @@
     </select>
   </div>
 
+  <section>
+    <h3>Waveform Preview</h3>
+    <div class="waveform-controls">
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={normalizeWaveform} />
+        Normalize waveform display
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" bind:checked={applyDeemphasis} />
+        Apply output de-emphasis filter
+      </label>
+    </div>
+    <div class="waveform-container">
+      <canvas bind:this={canvas} class="waveform-canvas"></canvas>
+      {#if isGenerating}
+        <div class="waveform-loading">
+          <div class="spinner"></div>
+          <div class="loading-text">Generating waveform...</div>
+        </div>
+      {/if}
+    </div>
+  </section>
+
+  {#if statusMessage}
+    <div class="status {statusType}">
+      {statusMessage}
+    </div>
+  {/if}
+
   <footer class="tool-footer">
     <p>Uses TMS5220/TMS5100 speech synthesis algorithm</p>
   </footer>
 </div>
+
+<style>
+  .sample-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+  }
+
+  .sample-btn {
+    padding: 0.5rem 1rem;
+    background: #2a2a4e;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .sample-btn:hover {
+    background: #3a3a5e;
+    border-color: #666;
+  }
+
+  .hex-input {
+    width: 100%;
+    padding: 0.75rem;
+    background: #1a1a2e;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    resize: vertical;
+  }
+
+  .controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    margin: 1.5rem 0;
+  }
+
+  .device-select {
+    padding: 0.5rem;
+    background: #2a2a4e;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 0.9rem;
+  }
+
+  .waveform-controls {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .checkbox-label input[type='checkbox'] {
+    cursor: pointer;
+  }
+
+  .waveform-container {
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background: #1a1a2e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .waveform-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(26, 26, 46, 0.9);
+    gap: 1rem;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #444;
+    border-top-color: #00ff88;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-text {
+    color: #00ff88;
+    font-size: 0.9rem;
+  }
+
+  .status {
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    margin: 1rem 0;
+    font-size: 0.9rem;
+  }
+
+  .status.info {
+    background: rgba(0, 123, 255, 0.1);
+    border: 1px solid rgba(0, 123, 255, 0.3);
+    color: #4da3ff;
+  }
+
+  .status.error {
+    background: rgba(255, 0, 0, 0.1);
+    border: 1px solid rgba(255, 0, 0, 0.3);
+    color: #ff6b6b;
+  }
+
+  .status.success {
+    background: rgba(0, 255, 136, 0.1);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+    color: #00ff88;
+  }
+</style>
