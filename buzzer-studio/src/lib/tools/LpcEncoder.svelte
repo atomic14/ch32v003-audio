@@ -10,6 +10,7 @@
   let rawSamples = $state<Float32Array | null>(null);
   let encodedSamples = $state<Float32Array | null>(null);
   let audioContext = $state<AudioContext | null>(null);
+  let currentSource = $state<AudioBufferSourceNode | null>(null);
   let frameAnalysisData = $state<FrameAnalysis[]>([]);
   let fileName = $state('');
   let statusMessage = $state('');
@@ -524,12 +525,27 @@
     }
 
     const audioBuffer = audioContext.createBuffer(1, samples.length, sampleRate);
-    audioBuffer.copyToChannel(samples, 0);
+    audioBuffer.getChannelData(0).set(samples);
+
+    // Stop any existing source
+    if (currentSource) {
+      try { currentSource.stop(); } catch {}
+      currentSource = null;
+    }
 
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
+    source.onended = () => { currentSource = null; };
     source.start();
+    currentSource = source;
+  }
+
+  function stopAudio() {
+    if (currentSource) {
+      try { currentSource.stop(); } catch {}
+      currentSource = null;
+    }
   }
 
   function downloadFile(filename: string, content: string) {
@@ -650,7 +666,10 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
       <div class="waveform-inline">
         <div class="waveform-header">
           <h4>Raw Input Waveform</h4>
-          <button class="btn btn-small" onclick={playRaw}>▶️ Play</button>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-small" onclick={playRaw}>▶️ Play</button>
+            <button class="btn btn-small" onclick={stopAudio} disabled={!currentSource}>■ Stop</button>
+          </div>
         </div>
         <canvas bind:this={waveformRaw} class="waveform-canvas"></canvas>
         <p class="waveform-info">{rawSamples.length} samples, 8kHz</p>
@@ -1040,7 +1059,10 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
               <input type="checkbox" bind:checked={applyDeemphasisEncoder} />
               <span>Apply de-emphasis</span>
             </label>
-            <button class="btn btn-small" onclick={playEncoded}>▶️ Play</button>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+              <button class="btn btn-small" onclick={playEncoded}>▶️ Play</button>
+              <button class="btn btn-small" onclick={stopAudio} disabled={!currentSource}>■ Stop</button>
+            </div>
           </div>
         </div>
         <canvas bind:this={waveformEncoded} class="waveform-canvas"></canvas>
