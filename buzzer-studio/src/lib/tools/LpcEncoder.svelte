@@ -9,6 +9,7 @@
   let encodedHex = $state('');
   let rawSamples = $state<Float32Array | null>(null);
   let encodedSamples = $state<Float32Array | null>(null);
+  let encodedFrameStarts = $state<number[] | null>(null);
   let audioContext = $state<AudioContext | null>(null);
   let currentSource = $state<AudioBufferSourceNode | null>(null);
   let frameAnalysisData = $state<FrameAnalysis[]>([]);
@@ -55,6 +56,15 @@
   let energyRatioThreshold = $state(1.2);
   let pitchQualityThreshold = $state(0.5);
   let applyDeemphasisEncoder = $state(false);
+  // Playback state
+  let isPaused = $state(false);
+  let playbackWhich = $state<'raw' | 'encoded' | null>(null);
+  let playbackStartTime = $state(0);
+  let playbackOffsetSamples = $state(0);
+  let playbackSampleRate = $state(8000);
+  let playbackTotalSamples = $state(0);
+  let playbackFrameIndex = $state(-1);
+  let playbackRaf: number | null = $state(null);
   // Input conditioning
   let removeDC = $state(true);
   let peakNormalize = $state(false);
@@ -122,7 +132,9 @@
       encoder = new LPCEncoder(getEncoderSettings());
       rawSamples = encoder.loadAndResampleWav(arrayBuffer);
 
-      if (rawSamples && endSample === 0) {
+      if (rawSamples) {
+        // Reset selection to full range for each new file
+        startSample = 0;
         endSample = rawSamples.length;
       }
 
@@ -160,6 +172,7 @@
           const deviceType = tablesVariant === 'tms5220' ? TalkieDevice.TMS5220 : TalkieDevice.TMS5100;
           stream.say(hexData, deviceType);
           encodedSamples = stream.generateAllSamples(applyDeemphasisEncoder);
+          encodedFrameStarts = stream.getFrameSampleStarts();
         }
       }
 
@@ -192,12 +205,12 @@
     ctx.lineWidth = 1.5;
     ctx.beginPath();
 
-    const step = Math.max(1, Math.floor(samples.length / width));
+    const sampleSize = samples.length / width;
     const centerY = height / 2;
 
     for (let x = 0; x < width; x++) {
-      const start = Math.floor(x * step);
-      const end = Math.min(start + step, samples.length);
+      const start = Math.floor(x * sampleSize);
+      const end = Math.min(start + Math.floor(Math.max(1, sampleSize)), samples.length);
 
       let min = 0;
       let max = 0;
@@ -230,7 +243,81 @@
     ctx.moveTo(0, centerY);
     ctx.lineTo(width, centerY);
     ctx.stroke();
+
+    // Highlight current frame in encoded waveform
+    if (canvas === waveformEncoded && playbackFrameIndex >= 0) {
+      let xStart = 0;
+      let xEnd = 0;
+      if (encodedFrameStarts && encodedSamples) {
+        const start = encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
+        const end = encodedFrameStarts[Math.min(playbackFrameIndex + 1, encodedFrameStarts.length)] ?? encodedSamples.length;
+        xStart = Math.round((start / encodedSamples.length) * width);
+        xEnd = Math.round((end / encodedSamples.length) * width);
+      } else {
+        const numFrames = Math.max(1, frameAnalysisData.length);
+        const visualIndex = Math.max(0, Math.min(numFrames - 1, playbackFrameIndex));
+        xStart = Math.round((visualIndex / numFrames) * width);
+        xEnd = Math.round(((visualIndex + 1) / numFrames) * width);
+      }
+      const framePx = Math.max(1, xEnd - xStart);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(xStart, 0, framePx, height);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xStart, 0);
+      ctx.lineTo(xStart, height);
+      ctx.stroke();
+    }
   }
+
+  function drawWaveformSegment (
+    ctx: CanvasRenderingContext2D,
+    samples: Float32Array,
+    startIdx: number,
+    endIdx: number,
+    x: number,
+    rowIndex: number,
+    rowHeight: number,
+    cellWidth: number,
+    color: string
+  ) {
+      const frameSamples = samples.slice(startIdx, endIdx);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      const waveformHeight = rowHeight - 4;
+      const waveformCenterY = rowIndex * rowHeight + rowHeight / 2;
+      const samplesPerPixel = Math.max(1, Math.ceil(frameSamples.length / (cellWidth - 4)));
+
+      for (let px = 0; px < cellWidth - 4; px++) {
+        const sampleIdx = Math.floor(px * samplesPerPixel);
+        if (sampleIdx >= frameSamples.length) break;
+
+        let min = 0,
+          max = 0;
+        for (let s = 0; s < samplesPerPixel && sampleIdx + s < frameSamples.length; s++) {
+          const val = frameSamples[sampleIdx + s];
+          if (val < min) min = val;
+          if (val > max) max = val;
+        }
+
+        const yMin = waveformCenterY - min * (waveformHeight / 2);
+        const yMax = waveformCenterY - max * (waveformHeight / 2);
+
+        if (px === 0) {
+          ctx.moveTo(x + 2 + px, yMax);
+        } else {
+          ctx.lineTo(x + 2 + px, yMax);
+        }
+        if (yMin !== yMax) {
+          ctx.lineTo(x + 2 + px, yMin);
+        }
+      }
+      ctx.stroke();
+    }
 
   function drawFrameTimeline() {
     if (!frameTimeline || frameAnalysisData.length === 0 || !rawSamples || !encodedSamples) return;
@@ -241,15 +328,15 @@
     // Calculate dimensions
     const numFrames = frameAnalysisData.length;
     const cellWidth = 16;
-    const leftMargin = 70;
+    const leftMargin = 100;
     const dataWidth = numFrames * cellWidth;
-    const canvasWidth = Math.max(800, dataWidth + leftMargin);
+    const canvasWidth = dataWidth + leftMargin;
     const rowHeight = 30;
-    const numRows = 7;
+    const numRows = 6;
     const canvasHeight = numRows * rowHeight + 20;
     const sampleRate = 8000;
     const frameRateValue = 40;
-    const samplesPerFrame = Math.floor(sampleRate / frameRateValue);
+    const samplesPerFrame = Math.floor(sampleRate / frameRate);
 
     // Set canvas size
     const dpr = window.devicePixelRatio || 1;
@@ -305,36 +392,41 @@
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 10px sans-serif';
-    const labels = ['Original', 'Reconstructed', 'Frame #', 'V/UV', 'Energy', 'Quality', 'Status'];
+    const labels = ['Reconstructed', 'Frame #', 'V/UV', 'Energy', 'Quality', 'Status'];
     for (let i = 0; i < labels.length; i++) {
       ctx.fillText(labels[i], 8, i * rowHeight + rowHeight / 2);
     }
 
-    // Helper function to draw waveform segment
-    const drawWaveformSegment = (
-      samples: Float32Array,
-      startIdx: number,
-      x: number,
-      rowIndex: number,
-      color: string
-    ) => {
-      const endIdx = Math.min(startIdx + samplesPerFrame, samples.length);
-      const frameSamples = samples.slice(startIdx, endIdx);
+    // Draw frames
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
 
-      ctx.strokeStyle = color;
+    for (let i = 0; i < numFrames; i++) {
+      const frame = frameAnalysisData[i];
+      const x = leftMargin + i * cellWidth;
+      const startSample = i * samplesPerFrame;
+
+      // Row 1: Reconstructed waveform (use precise frame start/end mapping if available)
+      const reconstructedColor = frame.isVoiced ? voicedColor : unvoicedColor;
+      const encStart = startSample;
+      const encEnd = startSample + samplesPerFrame;
+
+      const frameSamples = encodedSamples.slice(encStart, encEnd);
+
+      ctx.strokeStyle = reconstructedColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
 
       const waveformHeight = rowHeight - 4;
-      const waveformCenterY = rowIndex * rowHeight + rowHeight / 2;
+      const waveformCenterY = rowHeight / 2;
       const samplesPerPixel = Math.max(1, Math.ceil(frameSamples.length / (cellWidth - 4)));
 
       for (let px = 0; px < cellWidth - 4; px++) {
         const sampleIdx = Math.floor(px * samplesPerPixel);
         if (sampleIdx >= frameSamples.length) break;
 
-        let min = 0,
-          max = 0;
+        let min = 0, max = 0;
         for (let s = 0; s < samplesPerPixel && sampleIdx + s < frameSamples.length; s++) {
           const val = frameSamples[sampleIdx + s];
           if (val < min) min = val;
@@ -354,42 +446,24 @@
         }
       }
       ctx.stroke();
-    };
-
-    // Draw frames
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    for (let i = 0; i < numFrames; i++) {
-      const frame = frameAnalysisData[i];
-      const x = leftMargin + i * cellWidth;
-      const startSample = i * samplesPerFrame;
-
-      // Row 0: Original waveform
-      drawWaveformSegment(rawSamples, startSample, x, 0, '#6366f1');
-
-      // Row 1: Reconstructed waveform
-      const reconstructedColor = frame.isVoiced ? voicedColor : unvoicedColor;
-      drawWaveformSegment(encodedSamples, startSample, x, 1, reconstructedColor);
 
       // Draw frame boundary line
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, rowHeight * 2);
+      ctx.lineTo(x, rowHeight * numRows);
       ctx.stroke();
 
       // Row 2: Frame Numbers
       ctx.fillStyle = textColor;
       if (i % 5 === 0) {
-        ctx.fillText(i.toString(), x + cellWidth / 2, rowHeight * 2 + rowHeight / 2);
+        ctx.fillText(i.toString(), x + cellWidth / 2, rowHeight + rowHeight / 2);
       }
 
       // Row 3: V/UV Decision
       ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
-      ctx.fillRect(x + 2, rowHeight * 3 + 5, cellWidth - 4, rowHeight - 10);
+      ctx.fillRect(x + 2, rowHeight * 2 + 5, cellWidth - 4, rowHeight - 10);
 
       // Row 4: Energy Ratio
       const energyRatio = Math.min(frame.energyRatio, 3.0) / 3.0;
@@ -397,7 +471,7 @@
       ctx.fillStyle = '#6366f1';
       ctx.fillRect(
         x + 2,
-        rowHeight * 4 + rowHeight - 5 - energyBarHeight,
+        rowHeight * 3 + rowHeight - 5 - energyBarHeight,
         cellWidth - 4,
         energyBarHeight
       );
@@ -407,7 +481,7 @@
       ctx.fillStyle = '#f59e0b';
       ctx.fillRect(
         x + 2,
-        rowHeight * 5 + rowHeight - 5 - qualityBarHeight,
+        rowHeight * 4 + rowHeight - 5 - qualityBarHeight,
         cellWidth - 4,
         qualityBarHeight
       );
@@ -416,8 +490,21 @@
       ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
       const status = getCriterionStatus(frame);
       ctx.font = '9px monospace';
-      ctx.fillText(status, x + cellWidth / 2, rowHeight * 6 + rowHeight / 2);
+      ctx.fillText(status, x + cellWidth / 2, rowHeight * 5 + rowHeight / 2);
       ctx.font = '10px monospace';
+    }
+
+    // Playback head / current frame highlight
+    if (playbackFrameIndex >= 0 && playbackFrameIndex < numFrames) {
+      const headX = leftMargin + playbackFrameIndex * cellWidth;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(headX, 0, cellWidth, rowHeight * 7);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(headX, 0);
+      ctx.lineTo(headX, rowHeight * numRows);
+      ctx.stroke();
     }
   }
 
@@ -425,7 +512,7 @@
     if (!frameTimeline || frameAnalysisData.length === 0) return;
 
     const cellWidth = 16;
-    const leftMargin = 70;
+    const leftMargin = 100;
 
     function handleMouseMove(e: MouseEvent) {
       if (!frameTimeline || !frameDetailsTooltip) return;
@@ -450,6 +537,16 @@
         frameDetailsTooltip.style.display = 'block';
         frameDetailsTooltip.style.left = `${e.clientX + 15}px`;
         frameDetailsTooltip.style.top = `${e.clientY + 15}px`;
+
+        // Build K1–K10 display
+        const kVals = (frame.ks && frame.ks.length ? frame.ks.slice(1, 11) : []).map((v, i) => `K${i + 1}: ${v.toFixed(3)}`);
+        const kRows: string[] = [];
+        for (let r = 0; r < kVals.length; r += 5) {
+          kRows.push(`<div class=\"tooltip-row\">${kVals.slice(r, r + 5).join('&nbsp;&nbsp;')}</div>`);
+        }
+        const kSection = kVals.length
+          ? `<div class=\"tooltip-section\"><div class=\"tooltip-section-title\">LPC Coefficients (K1–K10)</div>${kRows.join('')}</div>`
+          : '';
 
         // Update tooltip content
         const criterionStatus = [];
@@ -479,6 +576,7 @@
                 <span class="tooltip-label">RMS:</span>
                 <span class="tooltip-value">${frame.rms.toFixed(2)}</span>
               </div>
+              ${kSection}
               ${criterionStatus.length > 0 ? `
                 <div class="tooltip-section">
                   <div class="tooltip-section-title">Failed Criteria:</div>
@@ -501,12 +599,37 @@
       hoveredFrameIndex = -1;
     }
 
+    function handleClick(e: MouseEvent) {
+      if (!frameTimeline) return;
+      const rect = frameTimeline.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x < leftMargin) return;
+      const frameIndex = Math.floor((x - leftMargin) / cellWidth);
+      if (frameIndex >= 0 && frameIndex < frameAnalysisData.length) {
+        const spf = Math.floor(8000 / frameRate);
+        const timelineStart = frameIndex * spf;
+        const decodedStart = (encodedFrameStarts && frameIndex < encodedFrameStarts.length)
+          ? encodedFrameStarts[frameIndex]
+          : timelineStart;
+        const decodedEnd = (encodedFrameStarts && frameIndex + 1 < encodedFrameStarts.length)
+          ? encodedFrameStarts[frameIndex + 1]
+          : (encodedSamples ? encodedSamples.length : timelineStart + spf);
+        console.log('Click timeline', {
+          x, width: rect.width, frameIndex, timelineStart, decodedStart, decodedEnd,
+          deltaTimelineVsDecoded: decodedStart - timelineStart
+        });
+        jumpToFrame(frameIndex);
+      }
+    }
+
     frameTimeline.addEventListener('mousemove', handleMouseMove);
     frameTimeline.addEventListener('mouseleave', handleMouseLeave);
+    frameTimeline.addEventListener('click', handleClick);
 
     return () => {
       frameTimeline?.removeEventListener('mousemove', handleMouseMove);
       frameTimeline?.removeEventListener('mouseleave', handleMouseLeave);
+      frameTimeline?.removeEventListener('click', handleClick);
     };
   }
 
@@ -520,23 +643,86 @@
 
   async function playRaw() {
     if (!rawSamples) return;
-    await playAudio(rawSamples, 8000);
+    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'raw' ? getCurrentSample() : 0);
+    await startPlayback(rawSamples, 8000, offset, 'raw');
   }
 
   async function playEncoded() {
     if (!encodedSamples) return;
-    await playAudio(encodedSamples, 8000);
+    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'encoded' ? getCurrentSample() : 0);
+    await startPlayback(encodedSamples, 8000, offset, 'encoded');
   }
 
-  async function playAudio(samples: Float32Array, sampleRate: number) {
+  function togglePlayRaw() {
+    if (playbackWhich === 'raw' && !isPaused) {
+      void pauseAudio();
+    } else {
+      void playRaw();
+    }
+  }
+
+  function togglePlayEncoded() {
+    if (playbackWhich === 'encoded' && !isPaused) {
+      void pauseAudio();
+    } else {
+      void playEncoded();
+    }
+  }
+
+  function getCurrentSample(): number {
+    if (!audioContext || !currentSource) return playbackOffsetSamples;
+    const elapsed = Math.max(0, audioContext.currentTime - playbackStartTime);
+    const current = playbackOffsetSamples + Math.floor(elapsed * playbackSampleRate);
+    return Math.min(current, playbackTotalSamples);
+  }
+
+  function updatePlaybackHead() {
+    if (!frameTimeline || frameAnalysisData.length === 0) return;
+    const samplesPerFrame = Math.floor(playbackSampleRate / frameRate);
+    const current = getCurrentSample();
+    if (encodedFrameStarts && encodedFrameStarts.length > 0) {
+      // Find frame index by start positions (binary search)
+      let lo = 0, hi = encodedFrameStarts.length - 1, idx = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (encodedFrameStarts[mid] <= current) {
+          idx = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, idx);
+    } else {
+      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, Math.floor(current / samplesPerFrame));
+    }
+    drawFrameTimeline();
+    if (waveformEncoded && encodedSamples) {
+      drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+    }
+    if (currentSource && !isPaused) {
+      playbackRaf = requestAnimationFrame(updatePlaybackHead);
+    } else {
+      playbackRaf = null;
+    }
+  }
+
+  async function startPlayback(
+    samples: Float32Array,
+    sampleRate: number,
+    offsetSamples: number,
+    which: 'raw' | 'encoded'
+  ) {
     if (!audioContext) {
       audioContext = new AudioContext();
     }
 
+    // Ensure context is running
     if (audioContext.state === 'suspended') {
-      await audioContext.resume();
+      try { await audioContext.resume(); } catch {}
     }
 
+    // Create buffer
     const audioBuffer = audioContext.createBuffer(1, samples.length, sampleRate);
     audioBuffer.getChannelData(0).set(samples);
 
@@ -546,18 +732,122 @@
       currentSource = null;
     }
 
+    // Create and start source with offset
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
-    source.onended = () => { currentSource = null; };
-    source.start();
+    source.onended = () => {
+      currentSource = null;
+      // If we intentionally paused (stopped the source), keep state and head
+      if (!isPaused) {
+        playbackWhich = null;
+        playbackFrameIndex = -1;
+        drawFrameTimeline();
+      }
+    };
+    const offsetSec = Math.max(0, Math.min(samples.length, offsetSamples)) / sampleRate;
+    source.start(0, offsetSec);
     currentSource = source;
+
+    // Track playback
+    playbackWhich = which;
+    playbackSampleRate = sampleRate;
+    playbackTotalSamples = samples.length;
+    playbackOffsetSamples = Math.floor(offsetSec * sampleRate);
+    // Start time at 'now' because offset is already accounted for in playbackOffsetSamples
+    playbackStartTime = audioContext.currentTime;
+    isPaused = false;
+    if (playbackRaf) cancelAnimationFrame(playbackRaf);
+    playbackRaf = requestAnimationFrame(updatePlaybackHead);
   }
 
   function stopAudio() {
     if (currentSource) {
       try { currentSource.stop(); } catch {}
       currentSource = null;
+    }
+    isPaused = false;
+    playbackWhich = null;
+    playbackFrameIndex = -1;
+    drawFrameTimeline();
+  }
+
+  async function pauseAudio() {
+    if (!audioContext) return;
+    if (!isPaused) {
+      // Pause: stop current source and remember offset
+      playbackOffsetSamples = getCurrentSample();
+      isPaused = true;
+      if (currentSource) {
+        try { currentSource.stop(); } catch {}
+        currentSource = null;
+      }
+      // Keep playhead visible at paused frame
+      const samplesPerFrame = Math.floor(playbackSampleRate / frameRate);
+      playbackFrameIndex = Math.min(
+        Math.max(0, frameAnalysisData.length - 1),
+        Math.floor(playbackOffsetSamples / Math.max(1, samplesPerFrame))
+      );
+      drawFrameTimeline();
+      if (waveformEncoded && encodedSamples) {
+        drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+      }
+    } else {
+      // Resume: start new source from saved offset
+      isPaused = false;
+      if (playbackWhich === 'raw' && rawSamples) {
+        await startPlayback(rawSamples, 8000, playbackOffsetSamples, 'raw');
+      } else if (playbackWhich === 'encoded' && encodedSamples) {
+        await startPlayback(encodedSamples, 8000, playbackOffsetSamples, 'encoded');
+      }
+    }
+  }
+
+  function seekToFrame(frameDelta: number) {
+    if (!playbackWhich) return;
+    const samplesPerFrame = Math.floor(playbackSampleRate / frameRate);
+    const currentFrame = Math.max(0, playbackFrameIndex);
+    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, currentFrame + frameDelta));
+    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
+      ? encodedFrameStarts[newFrame]
+      : newFrame * samplesPerFrame;
+
+    // If paused: scrub without starting playback
+    if (isPaused) {
+      playbackOffsetSamples = offset;
+      playbackFrameIndex = newFrame;
+      drawFrameTimeline();
+      return;
+    }
+
+    // If playing: jump and continue from there
+    if (playbackWhich === 'raw' && rawSamples) {
+      void startPlayback(rawSamples, 8000, offset, 'raw');
+    } else if (playbackWhich === 'encoded' && encodedSamples) {
+      void startPlayback(encodedSamples, 8000, offset, 'encoded');
+    }
+  }
+
+  function jumpToFrame(frameIndex: number) {
+    const samplesPerFrame = Math.floor(playbackSampleRate / frameRate);
+    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, frameIndex));
+    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
+      ? encodedFrameStarts[newFrame]
+      : newFrame * samplesPerFrame;
+    playbackOffsetSamples = offset;
+    playbackFrameIndex = newFrame;
+    if (currentSource && !isPaused) {
+      if (playbackWhich === 'raw' && rawSamples) {
+        void startPlayback(rawSamples, 8000, offset, 'raw');
+      } else if (playbackWhich === 'encoded' && encodedSamples) {
+        void startPlayback(encodedSamples, 8000, offset, 'encoded');
+      }
+    } else {
+      isPaused = true;
+      drawFrameTimeline();
+      if (waveformEncoded && encodedSamples) {
+        drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+      }
     }
   }
 
@@ -589,6 +879,25 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     statusMessage = 'Hex data copied to clipboard!';
   }
 
+  // Dump decoded samples for inspection (logs summary and downloads CSV)
+  function dumpDecodedSamples() {
+    if (!encodedSamples) return;
+    const threshold = 1e-6;
+    let leadingZeros = 0;
+    for (let i = 0; i < encodedSamples.length; i++) {
+      if (encodedSamples[i] === 0) leadingZeros++; else break;
+    }
+    let leadingNearZero = 0;
+    for (let i = 0; i < encodedSamples.length; i++) {
+      if (Math.abs(encodedSamples[i]) < threshold) leadingNearZero++; else break;
+    }
+    let csv = 'index,value\n';
+    for (let i = 0; i < encodedSamples.length; i++) {
+      csv += `${i},${encodedSamples[i]}\n`;
+    }
+    downloadFile('decoded_samples.csv', csv);
+  }
+
   // Draw raw waveform when canvas and data are ready
   $effect(() => {
     if (rawSamples && waveformRaw) {
@@ -601,6 +910,35 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     if (encodedSamples && waveformEncoded) {
       drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
     }
+  });
+
+  // Click-to-seek on encoded waveform
+  $effect(() => {
+    if (!waveformEncoded || !encodedSamples) return;
+
+    function handleWaveformClick(e: MouseEvent) {
+      if (!waveformEncoded || !encodedSamples) return;
+      const rect = waveformEncoded.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, x / Math.max(1, rect.width)));
+      const numFrames = Math.max(1, frameAnalysisData.length);
+      const frameIndex = Math.min(numFrames - 1, Math.floor(ratio * numFrames));
+      const decodedStart = (encodedFrameStarts && frameIndex < encodedFrameStarts.length) ? encodedFrameStarts[frameIndex] : -1;
+      const decodedEnd = (encodedFrameStarts && frameIndex + 1 < encodedFrameStarts.length) ? encodedFrameStarts[frameIndex + 1] : (encodedSamples?.length ?? -1);
+      const xStart = (decodedStart >= 0 && encodedSamples)
+        ? Math.round((decodedStart / encodedSamples.length) * rect.width)
+        : Math.round((frameIndex / numFrames) * rect.width);
+      const xEnd = (decodedEnd >= 0 && encodedSamples)
+        ? Math.round((decodedEnd / encodedSamples.length) * rect.width)
+        : Math.round(((frameIndex + 1) / numFrames) * rect.width);
+      console.log('Click waveform', {
+        x, width: rect.width, ratio, frameIndex, decodedStart, decodedEnd, xStart, xEnd
+      });
+      jumpToFrame(frameIndex);
+    }
+
+    waveformEncoded.addEventListener('click', handleWaveformClick);
+    return () => waveformEncoded?.removeEventListener('click', handleWaveformClick);
   });
 
   // Draw frame timeline when canvas and data are ready
@@ -681,8 +1019,12 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
         <div class="waveform-header">
           <h4>Raw Input Waveform</h4>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="btn btn-small" onclick={playRaw}>▶️ Play</button>
-            <button class="btn btn-small" onclick={stopAudio} disabled={!currentSource}>■ Stop</button>
+            <button class="btn btn-small" onclick={togglePlayRaw}>
+              {playbackWhich === 'raw' && !isPaused ? '⏸ Pause' : '▶️ Play'}
+            </button>
+            <button class="btn btn-small" onclick={() => seekToFrame(-1)} disabled={!playbackWhich || !isPaused}>⟨ Frame</button>
+            <button class="btn btn-small" onclick={() => seekToFrame(1)} disabled={!playbackWhich || !isPaused}>Frame ⟩</button>
+            <button class="btn btn-small" onclick={stopAudio} disabled={!playbackWhich}>■ Stop</button>
           </div>
         </div>
         <canvas bind:this={waveformRaw} class="waveform-canvas"></canvas>
@@ -717,11 +1059,11 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
               type="range"
               bind:value={unvoicedMultiplier}
               class="setting-slider"
-              min="0.5"
-              max="2"
-              step="0.1"
+              min="0"
+              max="3"
+              step="0.01"
             />
-            <span>{unvoicedMultiplier.toFixed(1)}</span>
+            <span>{unvoicedMultiplier.toFixed(2)}</span>
           </label>
         </div>
 
@@ -1129,30 +1471,12 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
       </div>
     </div>
 
-    {#if showWaveforms && encodedSamples}
-      <div class="waveform-inline">
-        <div class="waveform-header">
-          <h4>LPC Encoded/Decoded Waveform</h4>
-          <div style="display: flex; gap: 1rem; align-items: center;">
-            <label class="checkbox-label">
-              <input type="checkbox" bind:checked={applyDeemphasisEncoder} />
-              <span>Apply de-emphasis</span>
-            </label>
-            <div style="display: flex; gap: 0.5rem; align-items: center;">
-              <button class="btn btn-small" onclick={playEncoded}>▶️ Play</button>
-              <button class="btn btn-small" onclick={stopAudio} disabled={!currentSource}>■ Stop</button>
-            </div>
-          </div>
-        </div>
-        <canvas bind:this={waveformEncoded} class="waveform-canvas"></canvas>
-        <p class="waveform-info">{encodedSamples.length} samples, 8kHz</p>
-      </div>
-    {/if}
+    
   </section>
 
   {#if showFrameAnalysis}
     <section class="frame-analysis-section">
-      <h3>Frame Analysis</h3>
+      <h3>Result</h3>
 
       <details class="explanation-box">
         <summary class="explanation-summary">ℹ️ What do "Voiced" and "Unvoiced" mean?</summary>
@@ -1213,6 +1537,31 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
           </div>
         </div>
       </details>
+
+      {#if showWaveforms && encodedSamples}
+        <div class="waveform-inline">
+          <div class="waveform-header">
+            <h4>LPC Encoded/Decoded Waveform</h4>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+              <label class="checkbox-label">
+                <input type="checkbox" bind:checked={applyDeemphasisEncoder} />
+                <span>Apply de-emphasis</span>
+              </label>
+              <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <button class="btn btn-small" onclick={togglePlayEncoded}>
+                  {playbackWhich === 'encoded' && !isPaused ? '⏸ Pause' : '▶️ Play'}
+                </button>
+                <button class="btn btn-small" onclick={() => seekToFrame(-1)} disabled={!playbackWhich || !isPaused}>⟨ Frame</button>
+                <button class="btn btn-small" onclick={() => seekToFrame(1)} disabled={!playbackWhich || !isPaused}>Frame ⟩</button>
+                <button class="btn btn-small" onclick={dumpDecodedSamples}>Dump samples</button>
+                <button class="btn btn-small" onclick={stopAudio} disabled={!playbackWhich}>■ Stop</button>
+              </div>
+            </div>
+          </div>
+          <canvas bind:this={waveformEncoded} class="waveform-canvas"></canvas>
+          <p class="waveform-info">{encodedSamples.length} samples, 8kHz</p>
+        </div>
+      {/if}
 
       <div class="frame-timeline-container">
         <canvas bind:this={frameTimeline} class="frame-timeline-canvas"></canvas>
@@ -1342,6 +1691,15 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     border-radius: 4px;
   }
 
+  /* In the results panel (frame analysis section), render the waveform flush
+     without the card-style background/padding */
+  .frame-analysis-section .waveform-inline {
+    padding: 0;
+    background: transparent;
+    border-radius: 0;
+    border-width: 0;
+  }
+
   .waveform-header {
     display: flex;
     justify-content: space-between;
@@ -1357,7 +1715,7 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     width: 100%;
     height: 150px;
     background: #1a1a2e;
-    border: 1px solid #444;
+    border: none;
     border-radius: 4px;
   }
 

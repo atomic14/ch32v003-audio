@@ -153,6 +153,8 @@ export class TalkieStream {
   private periodCounter = 0;
   private synthRand = 0;
   private finished = false;
+  private totalSamplesGenerated = 0;
+  private frameSampleStarts: number[] = [];
 
   constructor() {}
 
@@ -183,6 +185,8 @@ export class TalkieStream {
     this.x0 = this.x1 = this.x2 = this.x3 = this.x4 = 0;
     this.x5 = this.x6 = this.x7 = this.x8 = this.x9 = 0;
     this.sampleCounter = SAMPLES_PER_FRAME;
+    this.totalSamplesGenerated = 0;
+    this.frameSampleStarts = [];
   }
 
   hasNext(): boolean {
@@ -275,6 +279,8 @@ export class TalkieStream {
     if (this.sampleCounter >= SAMPLES_PER_FRAME) {
       this.processNextFrame();
       this.sampleCounter = 0;
+      // Record the start sample index of this new frame
+      this.frameSampleStarts.push(this.totalSamplesGenerated);
     }
 
     if (this.finished) {
@@ -331,7 +337,9 @@ export class TalkieStream {
     this.x1 = this.x0 + Math.floor((this.synthK1 * u0) / (1 << K1_K2_SHIFT));
     this.x0 = u0;
 
-    return u0 << OUTPUT_SCALE_SHIFT;
+    const out = u0 << OUTPUT_SCALE_SHIFT;
+    this.totalSamplesGenerated++;
+    return out;
   }
 
   // Generate all samples and return as Float32Array for Web Audio API
@@ -364,6 +372,10 @@ export class TalkieStream {
 
   getSampleRate(): number {
     return FS;
+  }
+
+  getFrameSampleStarts(): number[] {
+    return this.frameSampleStarts.slice();
   }
 }
 
