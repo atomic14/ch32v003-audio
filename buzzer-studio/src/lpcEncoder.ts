@@ -42,7 +42,7 @@ export interface FrameAnalysis {
 }
 
 export interface EncoderSettings {
-  tablesVariant: 'tms5220' | 'tms5100';
+  tablesVariant: 'tms5220' | 'tms5100' | 'tms5200';
   frameRate: number;
   unvoicedThreshold: number;
   windowWidth: number;

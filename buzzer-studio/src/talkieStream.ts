@@ -5,7 +5,7 @@
 // TalkieDevice constants
 export const TalkieDevice = {
   TMS5220: 0, // TI TMS5220 chip (TI-99/4A, etc.) - 6-bit pitch encoding
-  TMS5100: 1, // TI TMS5100 chip (Speak & Spell) - 5-bit pitch encoding
+  TMS5100: 2, // TI TMS5100 chip (Speak & Spell) - 5-bit pitch encoding
 } as const;
 
 export type TalkieDeviceType = (typeof TalkieDevice)[keyof typeof TalkieDevice];

@@ -3,7 +3,7 @@
     trimSilence: boolean;
     includeHexPrefix: boolean;
     explicitStop: boolean;
-    tablesVariant: 'tms5220' | 'tms5100';
+    tablesVariant: 'tms5220' | 'tms5100' | 'tms5200';
     startSample: number;
     endSample: number;
   }
@@ -44,7 +44,8 @@
         <label>
           <span>Tables Variant</span>
           <select bind:value={options.tablesVariant} class="setting-input">
-            <option value="tms5220">TMS5220 (TI-99/4A)</option>
+            <option value="tms5220">TMS5220</option>
+            <option value="tms5200">TMS5200 (TI-99/4A)</option>
             <option value="tms5100">TMS5100 (Speak & Spell)</option>
           </select>
         </label>
