@@ -1,0 +1,1268 @@
+<script lang="ts">
+  import Button from '../shared/Button.svelte';
+  import WaveformCanvas from '../shared/WaveformCanvas.svelte';
+  import EncoderSettings from '../shared/EncoderSettings.svelte';
+  import FileUploadSection from '../shared/FileUploadSection.svelte';
+  import OutputOptionsSection from '../shared/OutputOptionsSection.svelte';
+  import EncodedOutputSection from '../shared/EncodedOutputSection.svelte';
+  import FrameAnalysisSection from '../shared/FrameAnalysisSection.svelte';
+  import { LPCEncoder } from '../../lpcEncoder';
+  import type { EncoderSettings as EncoderSettingsType, FrameAnalysis } from '../../lpcEncoder';
+  import { TalkieStream, TalkieDevice, parseHexString } from '../../talkieStream';
+
+  let currentFile = $state<File | null>(null);
+  let encoder = $state<LPCEncoder | null>(null);
+  let encodedHex = $state('');
+  let rawSamples = $state<Float32Array | null>(null);
+  let encodedSamples = $state<Float32Array | null>(null);
+  let encodedFrameStarts = $state<number[] | null>(null);
+  let audioContext = $state<AudioContext | null>(null);
+  let currentSource = $state<AudioBufferSourceNode | null>(null);
+  let frameAnalysisData = $state<FrameAnalysis[]>([]);
+  let fileName = $state('');
+  let statusMessage = $state('');
+
+  // Settings state
+  let encoderSettings = $state({
+    // Basic settings
+    preEmphasis: true,
+    preEmphasisAlpha: 0.9375,
+    unvoicedMultiplier: 1.0,
+    normalizeVoiced: true,
+    voicedRmsLimit: 14,
+    normalizeUnvoiced: true,
+    unvoicedRmsLimit: 14,
+    // Input conditioning
+    removeDC: true,
+    peakNormalize: false,
+    medianFilterWindow: 0,
+    noiseGateEnable: false,
+    noiseGateThreshold: 0.02,
+    noiseGateKnee: 2.0,
+    // Advanced settings
+    minFrequency: 50,
+    maxFrequency: 500,
+    submultipleThreshold: 0.9,
+    overridePitch: false,
+    pitchValue: 0,
+    pitchOffset: 0,
+    unvoicedThreshold: 0.3,
+    minEnergyThreshold: 0.0001,
+    energyRatioThreshold: 1.2,
+    pitchQualityThreshold: 0.5,
+    frameRate: 40,
+    windowWidth: 2,
+    highpassCutoff: 0,
+    lowpassCutoff: 48000,
+    speed: 1.0,
+    gain: 1.0,
+    rawExcitation: false
+  });
+
+  let outputOptions = $state({
+    trimSilence: false,
+    includeHexPrefix: true,
+    explicitStop: true,
+    tablesVariant: 'tms5220' as 'tms5220' | 'tms5100',
+    startSample: 0,
+    endSample: 0
+  });
+
+  let applyDeemphasisEncoder = $state(false);
+
+  // Playback state
+  let isPaused = $state(false);
+  let playbackWhich = $state<'raw' | 'encoded' | null>(null);
+  let playbackStartTime = $state(0);
+  let playbackOffsetSamples = $state(0);
+  let playbackSampleRate = $state(8000);
+  let playbackTotalSamples = $state(0);
+  let playbackFrameIndex = $state(-1);
+  let playbackRaf: number | null = $state(null);
+
+  // Computed
+  let showResults = $derived(encodedHex !== '');
+  let canEncode = $derived(rawSamples !== null);
+  let showWaveforms = $derived(rawSamples !== null);
+  let showFrameAnalysis = $derived(frameAnalysisData.length > 0);
+
+  function getEncoderSettings(): EncoderSettingsType {
+    return {
+      tablesVariant: outputOptions.tablesVariant,
+      frameRate: encoderSettings.frameRate,
+      unvoicedThreshold: encoderSettings.unvoicedThreshold,
+      windowWidth: encoderSettings.windowWidth,
+      preEmphasis: encoderSettings.preEmphasis,
+      preEmphasisAlpha: encoderSettings.preEmphasisAlpha,
+      normalizeUnvoiced: encoderSettings.normalizeUnvoiced,
+      normalizeVoiced: encoderSettings.normalizeVoiced,
+      includeExplicitStopFrame: outputOptions.explicitStop,
+      minPitchHz: encoderSettings.minFrequency,
+      maxPitchHz: encoderSettings.maxFrequency,
+      subMultipleThreshold: encoderSettings.submultipleThreshold,
+      overridePitch: encoderSettings.overridePitch,
+      pitchValue: encoderSettings.pitchValue,
+      pitchOffset: encoderSettings.pitchOffset,
+      voicedRmsLimit: encoderSettings.voicedRmsLimit,
+      unvoicedRmsLimit: encoderSettings.unvoicedRmsLimit,
+      unvoicedMultiplier: encoderSettings.unvoicedMultiplier,
+      highpassCutoff: encoderSettings.highpassCutoff,
+      lowpassCutoff: encoderSettings.lowpassCutoff,
+      speed: encoderSettings.speed,
+      gain: encoderSettings.gain,
+      rawExcitation: encoderSettings.rawExcitation,
+      removeDC: encoderSettings.removeDC,
+      peakNormalize: encoderSettings.peakNormalize,
+      medianFilterWindow: encoderSettings.medianFilterWindow,
+      noiseGateEnable: encoderSettings.noiseGateEnable,
+      noiseGateThreshold: encoderSettings.noiseGateThreshold,
+      noiseGateKnee: encoderSettings.noiseGateKnee,
+      trimSilence: outputOptions.trimSilence,
+      includeHexPrefix: outputOptions.includeHexPrefix,
+      startSample: outputOptions.startSample,
+      endSample: outputOptions.endSample,
+      minEnergyThreshold: encoderSettings.minEnergyThreshold,
+      energyRatioThreshold: encoderSettings.energyRatioThreshold,
+      pitchQualityThreshold: encoderSettings.pitchQualityThreshold,
+    };
+  }
+
+  async function handleFile(file: File) {
+    try {
+      currentFile = file;
+      fileName = file.name;
+      statusMessage = 'Loading file...';
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Create encoder with initial settings and load samples
+      encoder = new LPCEncoder(getEncoderSettings());
+      rawSamples = encoder.loadAndResampleWav(arrayBuffer);
+
+      if (rawSamples) {
+        // Reset selection to full range for each new file
+        outputOptions.startSample = 0;
+        outputOptions.endSample = rawSamples.length;
+      }
+
+      // Trigger encoding (waveforms will be drawn via effects)
+      await encodeAudio();
+
+      statusMessage = 'File loaded successfully';
+    } catch (error) {
+      statusMessage = `Error loading file: ${String(error)}`;
+      console.error(error);
+    }
+  }
+
+  async function encodeAudio() {
+    if (!currentFile) return;
+
+    try {
+      statusMessage = 'Encoding...';
+
+      const arrayBuffer = await currentFile.arrayBuffer();
+
+      // Create new encoder with current settings
+      encoder = new LPCEncoder(getEncoderSettings());
+      const result = encoder.encodeWav(arrayBuffer);
+
+      encodedHex = result.hex;
+      rawSamples = result.rawSamples;
+      frameAnalysisData = result.frameAnalysis;
+
+      // Generate encoded audio by decoding the LPC data
+      if (encodedHex) {
+        const hexData = parseHexString(encodedHex);
+        if (hexData) {
+          const stream = new TalkieStream();
+          const deviceType = outputOptions.tablesVariant === 'tms5220' ? TalkieDevice.TMS5220 : TalkieDevice.TMS5100;
+          stream.say(hexData, deviceType);
+          encodedSamples = stream.generateAllSamples(applyDeemphasisEncoder);
+          encodedFrameStarts = stream.getFrameSampleStarts();
+        }
+      }
+
+      // Count bytes
+      const byteCount = encodedHex.split(',').length;
+      statusMessage = `Encoded successfully! ${byteCount} bytes`;
+    } catch (error) {
+      statusMessage = `Encoding error: ${String(error)}`;
+      console.error(error);
+    }
+  }
+
+  function drawWaveform(canvas: HTMLCanvasElement, samples: Float32Array, color: string) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+
+    const width = rect.width;
+    const height = rect.height;
+
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+
+    const sampleSize = samples.length / width;
+    const centerY = height / 2;
+
+    for (let x = 0; x < width; x++) {
+      const start = Math.floor(x * sampleSize);
+      const end = Math.min(start + Math.floor(Math.max(1, sampleSize)), samples.length);
+
+      let min = 0;
+      let max = 0;
+
+      for (let i = start; i < end; i++) {
+        if (samples[i] < min) min = samples[i];
+        if (samples[i] > max) max = samples[i];
+      }
+
+      const yMin = centerY - min * centerY;
+      const yMax = centerY - max * centerY;
+
+      if (x === 0) {
+        ctx.moveTo(x, yMax);
+      } else {
+        ctx.lineTo(x, yMax);
+      }
+
+      if (yMin !== yMax) {
+        ctx.lineTo(x, yMin);
+      }
+    }
+
+    ctx.stroke();
+
+    // Center line
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, centerY);
+    ctx.lineTo(width, centerY);
+    ctx.stroke();
+
+    // Highlight current frame in encoded waveform
+    if (canvas === waveformEncoded && playbackFrameIndex >= 0) {
+      let xStart = 0;
+      let xEnd = 0;
+      if (encodedFrameStarts && encodedSamples) {
+        const start = encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
+        const end = encodedFrameStarts[Math.min(playbackFrameIndex + 1, encodedFrameStarts.length)] ?? encodedSamples.length;
+        xStart = Math.round((start / encodedSamples.length) * width);
+        xEnd = Math.round((end / encodedSamples.length) * width);
+      } else {
+        const numFrames = Math.max(1, frameAnalysisData.length);
+        const visualIndex = Math.max(0, Math.min(numFrames - 1, playbackFrameIndex));
+        xStart = Math.round((visualIndex / numFrames) * width);
+        xEnd = Math.round(((visualIndex + 1) / numFrames) * width);
+      }
+      const framePx = Math.max(1, xEnd - xStart);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(xStart, 0, framePx, height);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xStart, 0);
+      ctx.lineTo(xStart, height);
+      ctx.stroke();
+    }
+  }
+
+  function drawWaveformSegment (
+    ctx: CanvasRenderingContext2D,
+    samples: Float32Array,
+    startIdx: number,
+    endIdx: number,
+    x: number,
+    rowIndex: number,
+    rowHeight: number,
+    cellWidth: number,
+    color: string
+  ) {
+      const frameSamples = samples.slice(startIdx, endIdx);
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      const waveformHeight = rowHeight - 4;
+      const waveformCenterY = rowIndex * rowHeight + rowHeight / 2;
+      const samplesPerPixel = Math.max(1, Math.ceil(frameSamples.length / (cellWidth - 4)));
+
+      for (let px = 0; px < cellWidth - 4; px++) {
+        const sampleIdx = Math.floor(px * samplesPerPixel);
+        if (sampleIdx >= frameSamples.length) break;
+
+        let min = 0,
+          max = 0;
+        for (let s = 0; s < samplesPerPixel && sampleIdx + s < frameSamples.length; s++) {
+          const val = frameSamples[sampleIdx + s];
+          if (val < min) min = val;
+          if (val > max) max = val;
+        }
+
+        const yMin = waveformCenterY - min * (waveformHeight / 2);
+        const yMax = waveformCenterY - max * (waveformHeight / 2);
+
+        if (px === 0) {
+          ctx.moveTo(x + 2 + px, yMax);
+        } else {
+          ctx.lineTo(x + 2 + px, yMax);
+        }
+        if (yMin !== yMax) {
+          ctx.lineTo(x + 2 + px, yMin);
+        }
+      }
+      ctx.stroke();
+    }
+
+  function drawFrameTimeline() {
+    if (!frameTimeline || frameAnalysisData.length === 0 || !rawSamples || !encodedSamples) return;
+
+    const ctx = frameTimeline.getContext('2d');
+    if (!ctx) return;
+
+    // Calculate dimensions
+    const numFrames = frameAnalysisData.length;
+    const cellWidth = 16;
+    const leftMargin = 100;
+    const dataWidth = numFrames * cellWidth;
+    const canvasWidth = dataWidth + leftMargin;
+    const rowHeight = 30;
+    const numRows = 6;
+    const canvasHeight = numRows * rowHeight + 20;
+    const sampleRate = 8000;
+    const frameRateValue = encoderSettings.frameRate;
+    const samplesPerFrame = Math.floor(sampleRate / encoderSettings.frameRate);
+
+    // Set canvas size
+    const dpr = window.devicePixelRatio || 1;
+    frameTimeline.width = canvasWidth * dpr;
+    frameTimeline.height = canvasHeight * dpr;
+    frameTimeline.style.width = `${canvasWidth}px`;
+    frameTimeline.style.height = `${canvasHeight}px`;
+    ctx.scale(dpr, dpr);
+
+    // Clear canvas
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    // Define colors
+    const voicedColor = '#22c55e';
+    const unvoicedColor = '#ef4444';
+    const textColor = '#e5e7eb';
+    const gridColor = 'rgba(255, 255, 255, 0.1)';
+
+    // Helper to get criterion status
+    const getCriterionStatus = (frame: FrameAnalysis): string => {
+      const failed = [];
+      if (!frame.criterion1Pass) failed.push('1');
+      if (!frame.criterion2Pass) failed.push('2');
+      if (!frame.criterion3Pass) failed.push('3');
+      return failed.length > 0 ? `X${failed.join(',')}` : '✓';
+    };
+
+    // Draw row labels background
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.8)';
+    ctx.fillRect(0, 0, leftMargin, canvasHeight);
+
+    // Draw vertical separator line
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(leftMargin, 0);
+    ctx.lineTo(leftMargin, canvasHeight);
+    ctx.stroke();
+
+    // Draw horizontal grid lines
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= numRows; i++) {
+      const y = i * rowHeight;
+      ctx.beginPath();
+      ctx.moveTo(leftMargin, y);
+      ctx.lineTo(canvasWidth, y);
+      ctx.stroke();
+    }
+
+    // Draw row labels
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 10px sans-serif';
+    const labels = ['Reconstructed', 'Frame #', 'V/UV', 'Energy', 'Quality', 'Status'];
+    for (let i = 0; i < labels.length; i++) {
+      ctx.fillText(labels[i], 8, i * rowHeight + rowHeight / 2);
+    }
+
+    // Draw frames
+    ctx.font = '10px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    for (let i = 0; i < numFrames; i++) {
+      const frame = frameAnalysisData[i];
+      const x = leftMargin + i * cellWidth;
+      const startSample = i * samplesPerFrame;
+
+      // Row 1: Reconstructed waveform (use precise frame start/end mapping if available)
+      const reconstructedColor = frame.isVoiced ? voicedColor : unvoicedColor;
+      const encStart = startSample;
+      const encEnd = startSample + samplesPerFrame;
+
+      const frameSamples = encodedSamples.slice(encStart, encEnd);
+
+      ctx.strokeStyle = reconstructedColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      const waveformHeight = rowHeight - 4;
+      const waveformCenterY = rowHeight / 2;
+      const samplesPerPixel = Math.max(1, Math.ceil(frameSamples.length / (cellWidth - 4)));
+
+      for (let px = 0; px < cellWidth - 4; px++) {
+        const sampleIdx = Math.floor(px * samplesPerPixel);
+        if (sampleIdx >= frameSamples.length) break;
+
+        let min = 0, max = 0;
+        for (let s = 0; s < samplesPerPixel && sampleIdx + s < frameSamples.length; s++) {
+          const val = frameSamples[sampleIdx + s];
+          if (val < min) min = val;
+          if (val > max) max = val;
+        }
+
+        const yMin = waveformCenterY - min * (waveformHeight / 2);
+        const yMax = waveformCenterY - max * (waveformHeight / 2);
+
+        if (px === 0) {
+          ctx.moveTo(x + 2 + px, yMax);
+        } else {
+          ctx.lineTo(x + 2 + px, yMax);
+        }
+        if (yMin !== yMax) {
+          ctx.lineTo(x + 2 + px, yMin);
+        }
+      }
+      ctx.stroke();
+
+      // Draw frame boundary line
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, rowHeight * numRows);
+      ctx.stroke();
+
+      // Row 2: Frame Numbers
+      ctx.fillStyle = textColor;
+      if (i % 5 === 0) {
+        ctx.fillText(i.toString(), x + cellWidth / 2, rowHeight + rowHeight / 2);
+      }
+
+      // Row 3: V/UV Decision
+      ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
+      ctx.fillRect(x + 2, rowHeight * 2 + 5, cellWidth - 4, rowHeight - 10);
+
+      // Row 4: Energy Ratio
+      const energyRatio = Math.min(frame.energyRatio, 3.0) / 3.0;
+      const energyBarHeight = energyRatio * (rowHeight - 10);
+      ctx.fillStyle = '#6366f1';
+      ctx.fillRect(
+        x + 2,
+        rowHeight * 3 + rowHeight - 5 - energyBarHeight,
+        cellWidth - 4,
+        energyBarHeight
+      );
+
+      // Row 5: Pitch Quality
+      const qualityBarHeight = frame.pitchQuality * (rowHeight - 10);
+      ctx.fillStyle = '#f59e0b';
+      ctx.fillRect(
+        x + 2,
+        rowHeight * 4 + rowHeight - 5 - qualityBarHeight,
+        cellWidth - 4,
+        qualityBarHeight
+      );
+
+      // Row 6: Criterion Status
+      ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
+      const status = getCriterionStatus(frame);
+      ctx.font = '9px monospace';
+      ctx.fillText(status, x + cellWidth / 2, rowHeight * 5 + rowHeight / 2);
+      ctx.font = '10px monospace';
+    }
+
+    // Playback head / current frame highlight
+    if (playbackFrameIndex >= 0 && playbackFrameIndex < numFrames) {
+      const headX = leftMargin + playbackFrameIndex * cellWidth;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+      ctx.fillRect(headX, 0, cellWidth, rowHeight * 7);
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(headX, 0);
+      ctx.lineTo(headX, rowHeight * numRows);
+      ctx.stroke();
+    }
+  }
+
+  function setupFrameInteractivity() {
+    if (!frameTimeline || frameAnalysisData.length === 0) return;
+
+    const cellWidth = 16;
+    const leftMargin = 100;
+
+    function handleMouseMove(e: MouseEvent) {
+      if (!frameTimeline || !frameDetailsTooltip) return;
+
+      const rect = frameTimeline.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      if (x < leftMargin) {
+        frameDetailsTooltip.style.display = 'none';
+        hoveredFrameIndex = -1;
+        return;
+      }
+
+      const frameIndex = Math.floor((x - leftMargin) / cellWidth);
+
+      if (frameIndex >= 0 && frameIndex < frameAnalysisData.length) {
+        hoveredFrameIndex = frameIndex;
+        const frame = frameAnalysisData[frameIndex];
+
+        // Position tooltip
+        frameDetailsTooltip.style.display = 'block';
+        frameDetailsTooltip.style.left = `${e.clientX + 15}px`;
+        frameDetailsTooltip.style.top = `${e.clientY + 15}px`;
+
+        // Build K1–K10 display
+        const kVals = (frame.ks && frame.ks.length ? frame.ks.slice(1, 11) : []).map((v, i) => `K${i + 1}: ${v.toFixed(3)}`);
+        const kRows: string[] = [];
+        for (let r = 0; r < kVals.length; r += 5) {
+          kRows.push(`<div class=\"tooltip-row\">${kVals.slice(r, r + 5).join('&nbsp;&nbsp;')}</div>`);
+        }
+        const kSection = kVals.length
+          ? `<div class=\"tooltip-section\"><div class=\"tooltip-section-title\">LPC Coefficients (K1–K10)</div>${kRows.join('')}</div>`
+          : '';
+
+        // Update tooltip content
+        const criterionStatus = [];
+        if (!frame.criterion1Pass) criterionStatus.push('Energy too low');
+        if (!frame.criterion2Pass) criterionStatus.push('Energy ratio failed');
+        if (!frame.criterion3Pass) criterionStatus.push('Pitch quality too low');
+
+        frameDetailsTooltip.innerHTML = `
+          <div class="frame-tooltip">
+            <div class="frame-tooltip-header ${frame.isVoiced ? 'voiced' : 'unvoiced'}">
+              Frame ${frameIndex} - ${frame.isVoiced ? 'VOICED' : 'UNVOICED'}
+            </div>
+            <div class="frame-tooltip-content">
+              <div class="tooltip-row">
+                <span class="tooltip-label">Pitch:</span>
+                <span class="tooltip-value">${frame.pitchHz.toFixed(1)} Hz</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Pitch Quality:</span>
+                <span class="tooltip-value">${(frame.pitchQuality * 100).toFixed(1)}%</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">Energy Ratio:</span>
+                <span class="tooltip-value">${frame.energyRatio.toFixed(2)}</span>
+              </div>
+              <div class="tooltip-row">
+                <span class="tooltip-label">RMS:</span>
+                <span class="tooltip-value">${frame.rms.toFixed(2)}</span>
+              </div>
+              ${kSection}
+              ${criterionStatus.length > 0 ? `
+                <div class="tooltip-section">
+                  <div class="tooltip-section-title">Failed Criteria:</div>
+                  ${criterionStatus.map(s => `<div class="tooltip-failed">• ${s}</div>`).join('')}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      } else {
+        frameDetailsTooltip.style.display = 'none';
+        hoveredFrameIndex = -1;
+      }
+    }
+
+    function handleMouseLeave() {
+      if (frameDetailsTooltip) {
+        frameDetailsTooltip.style.display = 'none';
+      }
+      hoveredFrameIndex = -1;
+    }
+
+    function handleClick(e: MouseEvent) {
+      if (!frameTimeline) return;
+      const rect = frameTimeline.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      if (x < leftMargin) return;
+      const frameIndex = Math.floor((x - leftMargin) / cellWidth);
+      if (frameIndex >= 0 && frameIndex < frameAnalysisData.length) {
+        const spf = Math.floor(8000 / encoderSettings.frameRate);
+        const timelineStart = frameIndex * spf;
+        const decodedStart = (encodedFrameStarts && frameIndex < encodedFrameStarts.length)
+          ? encodedFrameStarts[frameIndex]
+          : timelineStart;
+        const decodedEnd = (encodedFrameStarts && frameIndex + 1 < encodedFrameStarts.length)
+          ? encodedFrameStarts[frameIndex + 1]
+          : (encodedSamples ? encodedSamples.length : timelineStart + spf);
+        console.log('Click timeline', {
+          x, width: rect.width, frameIndex, timelineStart, decodedStart, decodedEnd,
+          deltaTimelineVsDecoded: decodedStart - timelineStart
+        });
+        jumpToFrame(frameIndex);
+      }
+    }
+
+    frameTimeline.addEventListener('mousemove', handleMouseMove);
+    frameTimeline.addEventListener('mouseleave', handleMouseLeave);
+    frameTimeline.addEventListener('click', handleClick);
+
+    return () => {
+      frameTimeline?.removeEventListener('mousemove', handleMouseMove);
+      frameTimeline?.removeEventListener('mouseleave', handleMouseLeave);
+      frameTimeline?.removeEventListener('click', handleClick);
+    };
+  }
+
+  // Setup interactivity when frame timeline is drawn
+  $effect(() => {
+    if (frameAnalysisData.length > 0 && frameTimeline) {
+      const cleanup = setupFrameInteractivity();
+      return cleanup;
+    }
+  });
+
+  async function playRaw() {
+    if (!rawSamples) return;
+    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'raw' ? getCurrentSample() : 0);
+    await startPlayback(rawSamples, 8000, offset, 'raw');
+  }
+
+  async function playEncoded() {
+    if (!encodedSamples) return;
+    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'encoded' ? getCurrentSample() : 0);
+    await startPlayback(encodedSamples, 8000, offset, 'encoded');
+  }
+
+  function togglePlayRaw() {
+    if (playbackWhich === 'raw' && !isPaused) {
+      void pauseAudio();
+    } else {
+      void playRaw();
+    }
+  }
+
+  function togglePlayEncoded() {
+    if (playbackWhich === 'encoded' && !isPaused) {
+      void pauseAudio();
+    } else {
+      void playEncoded();
+    }
+  }
+
+  function getCurrentSample(): number {
+    if (!audioContext || !currentSource) return playbackOffsetSamples;
+    const elapsed = Math.max(0, audioContext.currentTime - playbackStartTime);
+    const current = playbackOffsetSamples + Math.floor(elapsed * playbackSampleRate);
+    return Math.min(current, playbackTotalSamples);
+  }
+
+  function updatePlaybackHead() {
+    if (!frameTimeline || frameAnalysisData.length === 0) return;
+    const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
+    const current = getCurrentSample();
+    if (encodedFrameStarts && encodedFrameStarts.length > 0) {
+      // Find frame index by start positions (binary search)
+      let lo = 0, hi = encodedFrameStarts.length - 1, idx = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (encodedFrameStarts[mid] <= current) {
+          idx = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, idx);
+    } else {
+      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, Math.floor(current / samplesPerFrame));
+    }
+    drawFrameTimeline();
+    if (waveformEncoded && encodedSamples) {
+      drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+    }
+    if (currentSource && !isPaused) {
+      playbackRaf = requestAnimationFrame(updatePlaybackHead);
+    } else {
+      playbackRaf = null;
+    }
+  }
+
+  async function startPlayback(
+    samples: Float32Array,
+    sampleRate: number,
+    offsetSamples: number,
+    which: 'raw' | 'encoded'
+  ) {
+    if (!audioContext) {
+      audioContext = new AudioContext();
+    }
+
+    // Ensure context is running
+    if (audioContext.state === 'suspended') {
+      try { await audioContext.resume(); } catch {}
+    }
+
+    // Create buffer
+    const audioBuffer = audioContext.createBuffer(1, samples.length, sampleRate);
+    audioBuffer.getChannelData(0).set(samples);
+
+    // Stop any existing source
+    if (currentSource) {
+      try { currentSource.stop(); } catch {}
+      currentSource = null;
+    }
+
+    // Create and start source with offset
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.onended = () => {
+      currentSource = null;
+      // If we intentionally paused (stopped the source), keep state and head
+      if (!isPaused) {
+        playbackWhich = null;
+        playbackFrameIndex = -1;
+        drawFrameTimeline();
+      }
+    };
+    const offsetSec = Math.max(0, Math.min(samples.length, offsetSamples)) / sampleRate;
+    source.start(0, offsetSec);
+    currentSource = source;
+
+    // Track playback
+    playbackWhich = which;
+    playbackSampleRate = sampleRate;
+    playbackTotalSamples = samples.length;
+    playbackOffsetSamples = Math.floor(offsetSec * sampleRate);
+    // Start time at 'now' because offset is already accounted for in playbackOffsetSamples
+    playbackStartTime = audioContext.currentTime;
+    isPaused = false;
+    if (playbackRaf) cancelAnimationFrame(playbackRaf);
+    playbackRaf = requestAnimationFrame(updatePlaybackHead);
+  }
+
+  function stopAudio() {
+    if (currentSource) {
+      try { currentSource.stop(); } catch {}
+      currentSource = null;
+    }
+    isPaused = false;
+    playbackWhich = null;
+    playbackFrameIndex = -1;
+    drawFrameTimeline();
+  }
+
+  async function pauseAudio() {
+    if (!audioContext) return;
+    if (!isPaused) {
+      // Pause: stop current source and remember offset
+      playbackOffsetSamples = getCurrentSample();
+      isPaused = true;
+      if (currentSource) {
+        try { currentSource.stop(); } catch {}
+        currentSource = null;
+      }
+      // Keep playhead visible at paused frame
+      const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
+      playbackFrameIndex = Math.min(
+        Math.max(0, frameAnalysisData.length - 1),
+        Math.floor(playbackOffsetSamples / Math.max(1, samplesPerFrame))
+      );
+      drawFrameTimeline();
+      if (waveformEncoded && encodedSamples) {
+        drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+      }
+    } else {
+      // Resume: start new source from saved offset
+      isPaused = false;
+      if (playbackWhich === 'raw' && rawSamples) {
+        await startPlayback(rawSamples, 8000, playbackOffsetSamples, 'raw');
+      } else if (playbackWhich === 'encoded' && encodedSamples) {
+        await startPlayback(encodedSamples, 8000, playbackOffsetSamples, 'encoded');
+      }
+    }
+  }
+
+  function seekToFrame(frameDelta: number) {
+    if (!playbackWhich) return;
+    const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
+    const currentFrame = Math.max(0, playbackFrameIndex);
+    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, currentFrame + frameDelta));
+    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
+      ? encodedFrameStarts[newFrame]
+      : newFrame * samplesPerFrame;
+
+    // If paused: scrub without starting playback
+    if (isPaused) {
+      playbackOffsetSamples = offset;
+      playbackFrameIndex = newFrame;
+      drawFrameTimeline();
+      return;
+    }
+
+    // If playing: jump and continue from there
+    if (playbackWhich === 'raw' && rawSamples) {
+      void startPlayback(rawSamples, 8000, offset, 'raw');
+    } else if (playbackWhich === 'encoded' && encodedSamples) {
+      void startPlayback(encodedSamples, 8000, offset, 'encoded');
+    }
+  }
+
+  function jumpToFrame(frameIndex: number) {
+    const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
+    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, frameIndex));
+    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
+      ? encodedFrameStarts[newFrame]
+      : newFrame * samplesPerFrame;
+    playbackOffsetSamples = offset;
+    playbackFrameIndex = newFrame;
+    if (currentSource && !isPaused) {
+      if (playbackWhich === 'raw' && rawSamples) {
+        void startPlayback(rawSamples, 8000, offset, 'raw');
+      } else if (playbackWhich === 'encoded' && encodedSamples) {
+        void startPlayback(encodedSamples, 8000, offset, 'encoded');
+      }
+    } else {
+      isPaused = true;
+      drawFrameTimeline();
+      if (waveformEncoded && encodedSamples) {
+        drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+      }
+    }
+  }
+
+  function downloadFile(filename: string, content: string) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCHeader() {
+    const baseName = fileName.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '_');
+    const code = `#pragma once
+
+const uint8_t ${baseName}_lpc[] = {
+    ${encodedHex}
+};
+
+const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
+`;
+    downloadFile(`${baseName}_lpc.h`, code);
+  }
+
+  function copyHexData() {
+    navigator.clipboard.writeText(encodedHex);
+    statusMessage = 'Hex data copied to clipboard!';
+  }
+
+  // Dump decoded samples for inspection (logs summary and downloads CSV)
+  function dumpDecodedSamples() {
+    if (!encodedSamples) return;
+    const threshold = 1e-6;
+    let leadingZeros = 0;
+    for (let i = 0; i < encodedSamples.length; i++) {
+      if (encodedSamples[i] === 0) leadingZeros++; else break;
+    }
+    let leadingNearZero = 0;
+    for (let i = 0; i < encodedSamples.length; i++) {
+      if (Math.abs(encodedSamples[i]) < threshold) leadingNearZero++; else break;
+    }
+    let csv = 'index,value\n';
+    for (let i = 0; i < encodedSamples.length; i++) {
+      csv += `${i},${encodedSamples[i]}\n`;
+    }
+    downloadFile('decoded_samples.csv', csv);
+  }
+
+  // Draw raw waveform when canvas and data are ready
+  $effect(() => {
+    if (rawSamples && waveformRaw) {
+      drawWaveform(waveformRaw, rawSamples, '#00ff88');
+    }
+  });
+
+  // Draw encoded waveform when canvas and data are ready
+  $effect(() => {
+    if (encodedSamples && waveformEncoded) {
+      drawWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
+    }
+  });
+
+  // Click-to-seek on encoded waveform
+  $effect(() => {
+    if (!waveformEncoded || !encodedSamples) return;
+
+    function handleWaveformClick(e: MouseEvent) {
+      if (!waveformEncoded || !encodedSamples) return;
+      const rect = waveformEncoded.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, x / Math.max(1, rect.width)));
+      const numFrames = Math.max(1, frameAnalysisData.length);
+      const frameIndex = Math.min(numFrames - 1, Math.floor(ratio * numFrames));
+      const decodedStart = (encodedFrameStarts && frameIndex < encodedFrameStarts.length) ? encodedFrameStarts[frameIndex] : -1;
+      const decodedEnd = (encodedFrameStarts && frameIndex + 1 < encodedFrameStarts.length) ? encodedFrameStarts[frameIndex + 1] : (encodedSamples?.length ?? -1);
+      const xStart = (decodedStart >= 0 && encodedSamples)
+        ? Math.round((decodedStart / encodedSamples.length) * rect.width)
+        : Math.round((frameIndex / numFrames) * rect.width);
+      const xEnd = (decodedEnd >= 0 && encodedSamples)
+        ? Math.round((decodedEnd / encodedSamples.length) * rect.width)
+        : Math.round(((frameIndex + 1) / numFrames) * rect.width);
+      console.log('Click waveform', {
+        x, width: rect.width, ratio, frameIndex, decodedStart, decodedEnd, xStart, xEnd
+      });
+      jumpToFrame(frameIndex);
+    }
+
+    waveformEncoded.addEventListener('click', handleWaveformClick);
+    return () => waveformEncoded?.removeEventListener('click', handleWaveformClick);
+  });
+
+  // Draw frame timeline when canvas and data are ready
+  $effect(() => {
+    if (frameAnalysisData.length > 0 && frameTimeline) {
+      drawFrameTimeline();
+    }
+  });
+
+  // Auto-encode when settings change
+  $effect(() => {
+    // Watch all settings for changes
+    const _ = [encoderSettings, outputOptions, applyDeemphasisEncoder];
+
+    if (canEncode) {
+      void encodeAudio();
+    }
+  });
+</script>
+
+<div class="tool-content">
+  <header class="tool-header">
+    <h2>🎙️ Talkie (LPC) Encoder</h2>
+    <p class="subtitle">Encode WAV files to LPC speech synthesis</p>
+
+    <div class="experimental-banner">
+      <div class="experimental-icon">⚠️</div>
+      <div class="experimental-content">
+        <strong>Experimental Feature - Work in Progress</strong>
+        <p>
+          This LPC encoder is under active development. Results may vary, and features are subject
+          to change. We welcome your feedback and bug reports!
+        </p>
+        <p>
+          Much of this code is based on the BlueWizard LPC encoder app along with feedback from many
+          helpful people.
+        </p>
+      </div>
+    </div>
+  </header>
+
+  <FileUploadSection
+    fileName={fileName}
+    statusMessage={statusMessage}
+    onFileSelect={handleFile}
+  />
+
+  {#if showWaveforms && rawSamples}
+    <WaveformCanvas
+      samples={rawSamples}
+      color="#00ff88"
+      label="Raw Input Waveform"
+      showPlaybackControls={true}
+      playbackFrameIndex={playbackFrameIndex}
+      frameAnalysisData={frameAnalysisData}
+      isPlaying={playbackWhich === 'raw'}
+      isPaused={isPaused}
+      canSeek={!!playbackWhich}
+      onPlay={togglePlayRaw}
+      onPause={togglePlayRaw}
+      onStop={stopAudio}
+      onSeekFrame={seekToFrame}
+    />
+  {/if}
+
+  <EncoderSettings bind:settings={encoderSettings} />
+
+  <OutputOptionsSection bind:options={outputOptions} />
+
+  {#if showFrameAnalysis}
+    <FrameAnalysisSection
+      frameAnalysisData={frameAnalysisData}
+      encodedSamples={encodedSamples}
+      encodedFrameStarts={encodedFrameStarts}
+      playbackFrameIndex={playbackFrameIndex}
+      frameRate={encoderSettings.frameRate}
+      bind:applyDeemphasis={applyDeemphasisEncoder}
+      playbackWhich={playbackWhich}
+      isPaused={isPaused}
+      onTogglePlayEncoded={togglePlayEncoded}
+      onSeekFrame={seekToFrame}
+      onStopAudio={stopAudio}
+      onDumpSamples={dumpDecodedSamples}
+      onSeekToFrame={jumpToFrame}
+    />
+  {/if}
+
+  {#if showResults}
+    <EncodedOutputSection
+      encodedHex={encodedHex}
+      statusMessage={statusMessage}
+      onExportHeader={exportCHeader}
+      onCopyHex={copyHexData}
+    />
+  {/if}
+
+  <footer class="tool-footer">
+    <p class="attribution-text">
+      LPC encoding algorithm based on
+      <a href="https://github.com/ptwz/python_wizard" target="_blank" rel="noopener noreferrer"
+        >Python Wizard</a
+      >
+      and
+      <a href="https://github.com/patrick99e99/BlueWizard" target="_blank" rel="noopener noreferrer"
+        >BlueWizard</a
+      >
+    </p>
+  </footer>
+</div>
+
+<style>
+  .experimental-banner {
+    display: flex;
+    gap: 1rem;
+    padding: 1rem;
+    background: rgba(255, 165, 0, 0.1);
+    border: 1px solid rgba(255, 165, 0, 0.3);
+    border-radius: 4px;
+    margin: 1rem 0;
+  }
+
+  .experimental-icon {
+    font-size: 1.5rem;
+  }
+
+  .experimental-content {
+    flex: 1;
+  }
+
+  .experimental-content strong {
+    color: #ffa500;
+  }
+
+  .experimental-content p {
+    margin: 0.5rem 0 0 0;
+    font-size: 0.9rem;
+  }
+
+  .explanation-box {
+    margin-bottom: 1.5rem;
+    background: #2a2a4e;
+    border-radius: 4px;
+    padding: 1rem;
+  }
+
+  .explanation-summary {
+    cursor: pointer;
+    font-weight: 500;
+    user-select: none;
+  }
+
+  .explanation-content {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .explanation-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .explanation-col h4 {
+    margin: 0 0 1rem 0;
+  }
+
+  .voiced-title {
+    color: #00ff88;
+  }
+
+  .unvoiced-title {
+    color: #ff6b6b;
+  }
+
+  .explanation-col p,
+  .explanation-why p {
+    margin: 0.5rem 0;
+  }
+
+  .explanation-col ul,
+  .explanation-why ul {
+    margin: 0.5rem 0;
+    padding-left: 1.5rem;
+  }
+
+  .try-it {
+    font-style: italic;
+    color: #888;
+  }
+
+  .explanation-why {
+    padding-top: 1rem;
+    border-top: 1px solid #444;
+  }
+
+  .explanation-why h4 {
+    color: #ffa500;
+    margin: 1rem 0;
+  }
+
+  .example {
+    font-weight: 500;
+  }
+
+  .frame-timeline-container {
+    width: 100%;
+    background: #1a1a2e;
+    border: 1px solid #444;
+    border-radius: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .frame-timeline-canvas {
+    display: block;
+    cursor: crosshair;
+  }
+
+  .frame-details {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  :global(.frame-tooltip) {
+    background: rgba(26, 26, 46, 0.98);
+    border: 1px solid #444;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    min-width: 200px;
+  }
+
+  :global(.frame-tooltip-header) {
+    padding: 0.5rem 0.75rem;
+    font-weight: bold;
+    font-size: 0.9rem;
+    border-bottom: 1px solid #444;
+  }
+
+  :global(.frame-tooltip-header.voiced) {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+  }
+
+  :global(.frame-tooltip-header.unvoiced) {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+
+  :global(.frame-tooltip-content) {
+    padding: 0.75rem;
+  }
+
+  :global(.tooltip-row) {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  :global(.tooltip-label) {
+    color: #888;
+  }
+
+  :global(.tooltip-value) {
+    color: #fff;
+    font-weight: 500;
+  }
+
+  :global(.tooltip-section) {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #444;
+  }
+
+  :global(.tooltip-section-title) {
+    color: #ffa500;
+    font-weight: bold;
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+  }
+
+  :global(.tooltip-failed) {
+    color: #ef4444;
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
+  }
+
+  .frame-analysis-section {
+    background: #2a2a4e;
+    padding: 1.5rem;
+    border-radius: 4px;
+    margin-bottom: 2rem;
+  }
+
+  .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .attribution-text {
+    font-size: 0.9rem;
+    color: #888;
+    text-align: center;
+  }
+
+  .attribution-text a {
+    color: #00ff88;
+    text-decoration: none;
+  }
+
+  .attribution-text a:hover {
+    text-decoration: underline;
+  }
+</style>

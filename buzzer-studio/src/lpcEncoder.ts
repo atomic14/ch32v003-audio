@@ -468,7 +468,7 @@ export class LPCEncoder {
     const initial: boolean[] = frames.map((f) => f.reflector.isVoiced());
     const window = 5;
     const half = Math.floor(window / 2);
-    const smoothed: boolean[] = new Array(initial.length).fill(false);
+    const smoothed: boolean[] = new Array<boolean>(initial.length).fill(false);
 
     for (let i = 0; i < initial.length; i++) {
       let voicedCount = 0;
@@ -540,24 +540,6 @@ export class LPCEncoder {
       previousVoiced = isVoiced;
     }
   }
-
-  // /** Smooth LPC reflection coefficients across frames to reduce jitter */
-  // private applyCoefficientSmoothing(frames: FrameData[]): void {
-  //   const alpha = 0.7; // weight for previous frame
-  //   for (let i = 1; i < frames.length; i++) {
-  //     const prev = frames[i - 1];
-  //     const curr = frames[i];
-  //     const prevVoiced = this.frameIsVoiced(prev);
-  //     const currVoiced = this.frameIsVoiced(curr);
-  //     if (prevVoiced !== currVoiced) continue; // avoid smearing across V/UV boundary
-  //     for (let k = 1; k <= 10; k++) {
-  //       const prevK = prev.reflector.ks[k];
-  //       const currK = curr.reflector.ks[k];
-  //       const smoothed = alpha * prevK + (1 - alpha) * currK;
-  //       curr.reflector.ks[k] = smoothed;
-  //     }
-  //   }
-  // }
 
   /**
    * Normalize voiced RMS using peak normalization (BlueWizard RMSNormalizer.m lines 9-22)
