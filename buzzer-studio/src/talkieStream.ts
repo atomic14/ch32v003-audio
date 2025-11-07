@@ -201,7 +201,8 @@ export class TalkieStream {
 
     const energy = this.getBits(4);
 
-    // Special case: SILENCE frame - no interpolation
+    // Special case: SILENCE frame - ramp to zero (like STOP frame)
+    // Allows smooth decay to prevent clicks when entering silence
     if (energy === FRAME_TYPE_SILENCE) {
       this.targetEnergy = 0;
       this.targetPeriod = 0;
@@ -215,19 +216,9 @@ export class TalkieStream {
       this.targetK8 = 0;
       this.targetK9 = 0;
       this.targetK10 = 0;
-      // Snap frameStart to target immediately (inhibit interpolation)
-      this.frameStartEnergy = 0;
-      this.frameStartPeriod = 0;
-      this.frameStartK1 = 0;
-      this.frameStartK2 = 0;
-      this.frameStartK3 = 0;
-      this.frameStartK4 = 0;
-      this.frameStartK5 = 0;
-      this.frameStartK6 = 0;
-      this.frameStartK7 = 0;
-      this.frameStartK8 = 0;
-      this.frameStartK9 = 0;
-      this.frameStartK10 = 0;
+      // Allow interpolation from current frameStart values to zero targets
+      // This creates a smooth decay ramp over the next 200 samples
+      // Unlike STOP frames, SILENCE frames can be followed by more speech
       return;
     }
 

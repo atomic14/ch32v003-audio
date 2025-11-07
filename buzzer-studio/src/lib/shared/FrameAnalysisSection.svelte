@@ -309,6 +309,7 @@
 
     const voicedColor = '#22c55e';
     const unvoicedColor = '#ef4444';
+    const silenceColor = '#6b7280'; // Gray for SILENCE frames
     const textColor = '#e5e7eb';
     const gridColor = 'rgba(255, 255, 255, 0.1)';
 
@@ -366,7 +367,11 @@
       const frameSamples = encodedSamples.slice(encStart, encEnd);
 
       // Row 1: Reconstructed waveform
-      const reconstructedColor = frame.isVoiced ? voicedColor : unvoicedColor;
+      const reconstructedColor = frame.isSilent
+        ? silenceColor
+        : frame.isVoiced
+          ? voicedColor
+          : unvoicedColor;
       ctx.strokeStyle = reconstructedColor;
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -415,8 +420,12 @@
         ctx.fillText(i.toString(), x + cellWidth / 2, rowHeight + rowHeight / 2);
       }
 
-      // Row 3: V/UV Decision
-      ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
+      // Row 3: V/UV/SILENCE Decision
+      ctx.fillStyle = frame.isSilent
+        ? silenceColor
+        : frame.isVoiced
+          ? voicedColor
+          : unvoicedColor;
       ctx.fillRect(x + 2, rowHeight * 2 + 5, cellWidth - 4, rowHeight - 10);
 
       // Row 4: Energy Ratio
@@ -431,7 +440,11 @@
       ctx.fillRect(x + 2, rowHeight * 4 + rowHeight - 5 - qualityBarHeight, cellWidth - 4, qualityBarHeight);
 
       // Row 6: Criterion Status
-      ctx.fillStyle = frame.isVoiced ? voicedColor : unvoicedColor;
+      ctx.fillStyle = frame.isSilent
+        ? silenceColor
+        : frame.isVoiced
+          ? voicedColor
+          : unvoicedColor;
       const status = getCriterionStatus(frame);
       ctx.font = '9px monospace';
       ctx.fillText(status, x + cellWidth / 2, rowHeight * 5 + rowHeight / 2);
@@ -574,10 +587,13 @@
         if (!frame.criterion2Pass) criterionStatus.push('Energy ratio failed');
         if (!frame.criterion3Pass) criterionStatus.push('Pitch quality too low');
 
+        const frameType = frame.isSilent ? 'SILENCE' : frame.isVoiced ? 'VOICED' : 'UNVOICED';
+        const frameClass = frame.isSilent ? 'silence' : frame.isVoiced ? 'voiced' : 'unvoiced';
+
         frameDetailsTooltip.innerHTML = `
           <div class="frame-tooltip">
-            <div class="frame-tooltip-header ${frame.isVoiced ? 'voiced' : 'unvoiced'}">
-              Frame ${frameIndex} - ${frame.isVoiced ? 'VOICED' : 'UNVOICED'}
+            <div class="frame-tooltip-header ${frameClass}">
+              Frame ${frameIndex} - ${frameType}
             </div>
             <div class="frame-tooltip-content">
               <div class="tooltip-row">
@@ -741,12 +757,22 @@
         </div>
       </div>
 
+      <div class="explanation-silence">
+        <h4 class="silence-title">⚫ SILENCE Frames</h4>
+        <p><strong>What they are:</strong> Frames that are too quiet to encode meaningful audio. The TMS5220 chip uses a special SILENCE frame (energy = 0) for these.</p>
+        <p><strong>When they occur:</strong> When the RMS (Root Mean Square) energy of a frame is below <strong>26.0</strong> in the chip's energy scale. This corresponds to normalized audio amplitude below approximately <strong>0.0008</strong> (0.08% of full scale).</p>
+        <p><strong>What happens:</strong> The chip smoothly ramps the energy down to zero over 25ms when entering silence (preventing clicks), then outputs complete silence. When exiting silence, energy smoothly ramps back up. No LPC coefficients are encoded - just a single "silence" flag.</p>
+        <p><strong>Why gray?</strong> Gray bars in the visualization indicate frames that will be encoded as SILENCE, helping you see very quiet passages or pauses in speech.</p>
+        <p class="try-it"><strong>Common causes:</strong> Pauses between words, very quiet breaths, background noise gating, or leading/trailing silence in recordings.</p>
+      </div>
+
       <div class="explanation-why">
         <h4>Why does this matter for LPC?</h4>
         <p>The TMS5220 speech chip needs to know which type of sound to generate:</p>
         <ul>
-          <li><strong>VOICED frame</strong> → Generate a periodic buzz at a specific pitch (like a musical note)</li>
-          <li><strong>UNVOICED frame</strong> → Generate random noise (like white noise/static)</li>
+          <li><strong>VOICED frame</strong> (🟢 green) → Generate a periodic buzz at a specific pitch (like a musical note)</li>
+          <li><strong>UNVOICED frame</strong> (🔴 red) → Generate random noise (like white noise/static)</li>
+          <li><strong>SILENCE frame</strong> (⚫ gray) → Generate no sound (RMS too low, encodes as energy = 0)</li>
         </ul>
         <p>Then it filters that sound through the LPC coefficients to shape it into the right phoneme.</p>
 
@@ -861,6 +887,26 @@
 
   .unvoiced-title {
     color: #ff6b6b;
+  }
+
+  .silence-title {
+    color: #6b7280;
+  }
+
+  .explanation-silence {
+    padding: 1rem;
+    margin: 1rem 0;
+    background: rgba(107, 114, 128, 0.1);
+    border-left: 3px solid #6b7280;
+    border-radius: 4px;
+  }
+
+  .explanation-silence h4 {
+    margin: 0 0 1rem 0;
+  }
+
+  .explanation-silence p {
+    margin: 0.5rem 0;
   }
 
   .explanation-col p,
@@ -1020,6 +1066,11 @@
   :global(.frame-tooltip-header.unvoiced) {
     background: rgba(239, 68, 68, 0.2);
     color: #ef4444;
+  }
+
+  :global(.frame-tooltip-header.silence) {
+    background: rgba(107, 114, 128, 0.2);
+    color: #6b7280;
   }
 
   :global(.frame-tooltip-content) {

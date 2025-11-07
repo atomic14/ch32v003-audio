@@ -143,25 +143,20 @@ export class Reflector {
   }
 
   /**
-   * Multi-criteria voiced/unvoiced detection
+   * Voiced/unvoiced detection using 2 criteria
    *
-   * Uses up to three criteria:
+   * Uses two criteria:
    * 1. Low energy: originalEnergy < minEnergyThreshold → unvoiced (always checked)
-   * 2. Energy ratio: (originalEnergy / emphasizedEnergy) < energyRatioThreshold → unvoiced (only when pre-emphasis is on)
    * 3. Weak pitch: pitchQuality < pitchQualityThreshold → unvoiced (always checked)
    *
-   * The energy-based criteria work because:
-   * - Voiced sounds (vowels) have strong low frequencies
-   * - Pre-emphasis reduces their energy significantly
-   * - Unvoiced sounds (consonants) are high-frequency noise
-   * - Pre-emphasis has little effect on them
+   * Criterion 2 (energy ratio) is always skipped (skipEnergyRatioCheck=true).
+   * The pitch quality criterion is sufficient for distinguishing periodic (voiced)
+   * from aperiodic (unvoiced) signals.
    *
    * The pitch quality criterion catches:
    * - Consonants with some low-frequency energy but no clear pitch
    * - Buzzy sounds like 's', 'sh', 'f' that lack periodicity
-   *
-   * Note: Criterion 2 is skipped when pre-emphasis is disabled (skipEnergyRatioCheck=true)
-   * because the energy ratio only makes sense when comparing before/after pre-emphasis.
+   * - Transitions between voiced and unvoiced speech
    */
   isUnvoiced(): boolean {
     if (this.useEnergyBasedDetection && this.originalEnergy > 0 && this.emphasizedEnergy > 0) {

@@ -26,6 +26,7 @@ import {
 export interface FrameAnalysis {
   frameNumber: number;
   isVoiced: boolean;
+  isSilent: boolean; // True if RMS will quantize to 0 (SILENCE frame)
   pitch: number; // Period in samples
   pitchHz: number; // Frequency in Hz
   pitchQuality: number; // Autocorrelation coefficient (0-1)
@@ -220,34 +221,34 @@ export class LPCEncoder {
       );
     }
 
-    // CRITICAL: Create pitch buffer BEFORE pre-emphasis (BlueWizard line 33)
-    // Pitch estimation uses original non-pre-emphasized signal
-    const pitchBuffer = new Float32Array(samples);
+    // CRITICAL: Keep original samples for pitch estimation and unvoiced frames
+    const originalSamples = new Float32Array(samples);
 
-    // Pre-emphasis if enabled (applied to main buffer only, not pitch buffer)
+    // Apply pre-emphasis to create emphasized buffer (for voiced frames and energy ratio)
+    let emphasizedSamples = samples;
     if (this.settings.preEmphasis) {
-      samples = AudioPreprocessor.applyPreEmphasis(samples, this.settings.preEmphasisAlpha);
+      emphasizedSamples = AudioPreprocessor.applyPreEmphasis(samples, this.settings.preEmphasisAlpha);
     }
 
-    // Prepare pitch buffer with lowpass filter for pitch estimation
+    // Prepare pitch buffer with lowpass filter for pitch estimation (uses original)
     let pitchSamples = AudioPreprocessor.applyLowPassFilterHighOrder(
-      pitchBuffer,
+      originalSamples,
       PITCH_ESTIMATION_LOWPASS_HZ,
       TMS_SAMPLE_RATE,
       PITCH_ESTIMATION_FILTER_ORDER
     );
 
-    // Store preprocessed samples
-    const preprocessedSamples = new Float32Array(samples);
+    // Store preprocessed samples (original for display)
+    const preprocessedSamples = new Float32Array(originalSamples);
 
     // Calculate frame size based on frame rate
     const frameSize = Math.floor(TMS_SAMPLE_RATE / this.settings.frameRate);
 
-    // Process frames (pass main buffer, pitch buffer, and original buffer for energy calculation)
-    console.log(`Processing ${Math.floor(samples.length / frameSize)} frames...`);
+    // Process frames (use emphasized for voiced, original for unvoiced)
+    console.log(`Processing ${Math.floor(originalSamples.length / frameSize)} frames...`);
     let { frames, frameAnalysis } = this.processFrames(
-      samples,
-      pitchBuffer,
+      originalSamples,
+      emphasizedSamples,
       pitchSamples,
       frameSize
     );
@@ -325,8 +326,7 @@ export class LPCEncoder {
 
   /**
    * Calculate frame energy for voiced/unvoiced detection
-   * For original (pre-pre-emphasis): sqrt(sum_of_squares * ORIGINAL_ENERGY_SCALE)
-   * For emphasized: sqrt(sum_of_squares / EMPHASIZED_ENERGY_DIVISOR)
+   * Can calculate from original or emphasized signal
    */
   private calculateFrameEnergy(frame: Float32Array, isOriginal: boolean): number {
     let sumSquares = 0;
@@ -343,14 +343,15 @@ export class LPCEncoder {
 
   /**
    * Process audio samples into LPC frames
-   * Following BlueWizard's algorithm with multi-criteria energy-based voiced/unvoiced detection:
-   * - LPC analysis uses pre-emphasized buffer with user's windowWidth
-   * - Pitch estimation uses non-pre-emphasized buffer with windowWidth=2
-   * - Energy calculated from both original and emphasized buffers for v/uv detection
+   * Following BlueWizard's algorithm with selective buffer usage:
+   * - Voiced/unvoiced detection uses BOTH original and emphasized for full 3-criterion check
+   * - LPC analysis uses emphasized buffer for VOICED frames, original for UNVOICED
+   * - Pitch estimation uses original non-pre-emphasized buffer with windowWidth=2
+   * - Energy calculated from both buffers for energy ratio criterion
    */
   private processFrames(
-    emphasizedSamples: Float32Array,
     originalSamples: Float32Array,
+    emphasizedSamples: Float32Array,
     pitchSamples: Float32Array,
     frameSize: number
   ): { frames: FrameData[]; frameAnalysis: FrameAnalysis[] } {
@@ -364,57 +365,23 @@ export class LPCEncoder {
     // Pitch estimation ALWAYS uses windowWidth=2 (BlueWizard line 109)
     const pitchWindowSize = frameSize * 2;
 
-    for (let i = 0; i + frameSize <= emphasizedSamples.length; i += hopSize) {
-      // Calculate frame energy for voiced/unvoiced detection
+    for (let i = 0; i + frameSize <= originalSamples.length; i += hopSize) {
+      // Step 1: Calculate frame energy from BOTH original and emphasized signals
       // Energy calculated over the 200-sample frame (not the windowed analysis frame)
       const energyFrameStart = i;
-      const energyFrameEnd = Math.min(emphasizedSamples.length, i + frameSize);
+      const energyFrameEnd = Math.min(originalSamples.length, i + frameSize);
       const originalEnergyFrame = originalSamples.slice(energyFrameStart, energyFrameEnd);
       const emphasizedEnergyFrame = emphasizedSamples.slice(energyFrameStart, energyFrameEnd);
 
       const originalEnergy = this.calculateFrameEnergy(originalEnergyFrame, true);
       const emphasizedEnergy = this.calculateFrameEnergy(emphasizedEnergyFrame, false);
 
-      // Extract LPC analysis window from pre-emphasized buffer
-      const windowStart = Math.max(0, i - Math.floor((analysisWindowSize - frameSize) / 2));
-      const windowEnd = Math.min(emphasizedSamples.length, windowStart + analysisWindowSize);
-      const frame = emphasizedSamples.slice(windowStart, windowEnd);
-
-      // Extract pitch window from non-pre-emphasized buffer (windowWidth=2)
+      // Step 2: Extract pitch window from pitch buffer and estimate pitch
       // BlueWizard's Segmenter.m line 41: starts at hop position, NOT centered!
-      // sampleIndex = index * self.size + i  → starts at frame position
       const pitchWindowStart = i;
       const pitchWindowEnd = Math.min(pitchSamples.length, i + pitchWindowSize);
       const pitchFrame = pitchSamples.slice(pitchWindowStart, pitchWindowEnd);
 
-      // Apply Hamming window to LPC frame
-      const windowed = AudioPreprocessor.applyHammingWindow(frame);
-
-      // Calculate autocorrelation coefficients up to order 10 (r[0..10])
-      const autocorr = getCoefficients(windowed, 11);
-
-      // Get reflection coefficients via Leroux-Gueguen algorithm
-      const reflector = Reflector.translateCoefficients(
-        this.codingTable,
-        autocorr,
-        frame.length,
-        this.settings.unvoicedThreshold
-      );
-
-      // Store energy values for multi-criteria voiced/unvoiced detection
-      // Always use multi-criteria detection (Criteria 1 & 3 work without pre-emphasis)
-      // Only Criterion 2 (energy ratio) requires pre-emphasis
-      reflector.originalEnergy = originalEnergy;
-      reflector.emphasizedEnergy = emphasizedEnergy;
-      reflector.useEnergyBasedDetection = true;
-      reflector.skipEnergyRatioCheck = !this.settings.preEmphasis;
-
-      // Apply detection threshold settings
-      reflector.minEnergyThreshold = this.settings.minEnergyThreshold;
-      reflector.energyRatioThreshold = this.settings.energyRatioThreshold;
-      reflector.pitchQualityThreshold = this.settings.pitchQualityThreshold;
-
-      // Estimate pitch from pitch buffer (non-pre-emphasized, 800Hz lowpass)
       let pitch: number;
       let pitchQuality: number;
 
@@ -439,8 +406,52 @@ export class LPCEncoder {
         pitch = Math.max(0, pitch + this.settings.pitchOffset);
       }
 
-      // Store pitch quality for Criterion 3 (periodicity check)
+      // Step 3: Voiced/unvoiced determination using 2 criteria
+      // Criterion 1: Minimum energy threshold (exclude silence)
+      // Criterion 3: Pitch quality (periodic = voiced, aperiodic = unvoiced)
+      // Criterion 2 (energy ratio) is skipped - pitch quality is sufficient
+      const energyRatio = originalEnergy / emphasizedEnergy;
+      const passesEnergyThreshold = originalEnergy >= this.settings.minEnergyThreshold;
+      const passesEnergyRatio = energyRatio >= this.settings.energyRatioThreshold;
+      const passesPitchQuality = pitchQuality >= this.settings.pitchQualityThreshold;
+
+      // Frame is voiced if both criteria pass (skip energy ratio check)
+      const isVoicedFrame = passesEnergyThreshold && passesPitchQuality;
+
+      // Step 4: Extract LPC analysis window
+      const windowStart = Math.max(0, i - Math.floor((analysisWindowSize - frameSize) / 2));
+      const windowEnd = Math.min(originalSamples.length, windowStart + analysisWindowSize);
+
+      // Use emphasized buffer for ALL frames when pre-emphasis is enabled
+      // The TMS5220 decoder compensates for this during synthesis
+      const sourceBuffer = this.settings.preEmphasis ? emphasizedSamples : originalSamples;
+      const frame = sourceBuffer.slice(windowStart, Math.min(sourceBuffer.length, windowEnd));
+
+      // Step 5: Apply Hamming window to LPC frame
+      const windowed = AudioPreprocessor.applyHammingWindow(frame);
+
+      // Step 6: Calculate autocorrelation coefficients up to order 10 (r[0..10])
+      const autocorr = getCoefficients(windowed, 11);
+
+      // Step 7: Get reflection coefficients via Leroux-Gueguen algorithm
+      const reflector = Reflector.translateCoefficients(
+        this.codingTable,
+        autocorr,
+        frame.length,
+        this.settings.unvoicedThreshold
+      );
+
+      // Store energy and pitch quality for full 3-criterion detection
+      reflector.originalEnergy = originalEnergy;
+      reflector.emphasizedEnergy = emphasizedEnergy;
       reflector.pitchQuality = pitchQuality;
+      reflector.useEnergyBasedDetection = true;
+      reflector.skipEnergyRatioCheck = true; // Always skip energy ratio (criterion 2)
+
+      // Apply detection threshold settings
+      reflector.minEnergyThreshold = this.settings.minEnergyThreshold;
+      reflector.energyRatioThreshold = this.settings.energyRatioThreshold;
+      reflector.pitchQualityThreshold = this.settings.pitchQualityThreshold;
 
       // NOTE: BlueWizard uses RMS directly from Leroux-Gueguen algorithm (Reflector.m)
       // Do NOT recalculate RMS here - the value from translateCoefficients is correct!
@@ -451,25 +462,26 @@ export class LPCEncoder {
       frames.push(frameData);
 
       // Capture frame analysis for visualization
-      const energyRatio = reflector.originalEnergy / reflector.emphasizedEnergy;
-      const isVoiced = !reflector.isUnvoiced();
+      // A frame will be encoded as SILENCE if RMS < 26.0 (midpoint between RMS_TABLE[0]=0.0 and RMS_TABLE[1]=52.0)
+      const isSilent = reflector.rms < 26.0;
 
       const analysis: FrameAnalysis = {
         frameNumber: frames.length - 1,
-        isVoiced,
+        isVoiced: isVoicedFrame,
+        isSilent,
         pitch,
         pitchHz: pitch > 0 ? 8000 / pitch : 0,
         pitchQuality,
-        originalEnergy: reflector.originalEnergy,
-        emphasizedEnergy: reflector.emphasizedEnergy,
+        originalEnergy,
+        emphasizedEnergy,
         energyRatio,
         rms: reflector.rms,
         ks: reflector.ks.slice(), // Copy reflection coefficients
-        // Criterion results (only valid when energy-based detection is used)
-        criterion1Pass: reflector.originalEnergy >= reflector.minEnergyThreshold,
-        criterion2Pass: energyRatio >= reflector.energyRatioThreshold,
-        criterion3Pass: pitchQuality >= reflector.pitchQualityThreshold,
-        detectionMethod: reflector.useEnergyBasedDetection ? 'energy-based' : 'k1-based',
+        // Criterion results
+        criterion1Pass: passesEnergyThreshold,
+        criterion2Pass: passesEnergyRatio,
+        criterion3Pass: passesPitchQuality,
+        detectionMethod: 'energy-based',
       };
       frameAnalysis.push(analysis);
     }
@@ -564,12 +576,19 @@ export class LPCEncoder {
   /**
    * Normalize voiced RMS using peak normalization (BlueWizard RMSNormalizer.m lines 9-22)
    * Finds max RMS across all voiced frames and scales to rmsLimit
+   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) from normalization to preserve them
    */
   private normalizeVoicedRMS(frames: FrameData[]): void {
-    // Find maximum RMS across all voiced frames
+    const SILENCE_RMS_THRESHOLD = 26.0;
+
+    // Find maximum RMS across all voiced frames (excluding SILENCE frames)
     let max = 0.0;
     for (const frame of frames) {
-      if (!frame.reflector.isUnvoiced() && frame.reflector.rms > max) {
+      if (
+        !frame.reflector.isUnvoiced() &&
+        frame.reflector.rms >= SILENCE_RMS_THRESHOLD &&
+        frame.reflector.rms > max
+      ) {
         max = frame.reflector.rms;
       }
     }
@@ -580,9 +599,9 @@ export class LPCEncoder {
     const limitIndex = Math.min(this.settings.voicedRmsLimit, this.codingTable.rms.length - 1);
     const scale = this.codingTable.rms[limitIndex] / max;
 
-    // Scale all voiced frames
+    // Scale all voiced frames (excluding SILENCE frames)
     for (const frame of frames) {
-      if (!frame.reflector.isUnvoiced()) {
+      if (!frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
         frame.reflector.rms = frame.reflector.rms * scale;
       }
     }
@@ -591,12 +610,19 @@ export class LPCEncoder {
   /**
    * Normalize unvoiced RMS using peak normalization (BlueWizard RMSNormalizer.m lines 24-37)
    * Finds max RMS across all unvoiced frames and scales to unvoicedRMSLimit
+   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) from normalization to preserve them
    */
   private normalizeUnvoicedRMS(frames: FrameData[]): void {
-    // Find maximum RMS across all unvoiced frames
+    const SILENCE_RMS_THRESHOLD = 26.0;
+
+    // Find maximum RMS across all unvoiced frames (excluding SILENCE frames)
     let max = 0.0;
     for (const frame of frames) {
-      if (frame.reflector.isUnvoiced() && frame.reflector.rms > max) {
+      if (
+        frame.reflector.isUnvoiced() &&
+        frame.reflector.rms >= SILENCE_RMS_THRESHOLD &&
+        frame.reflector.rms > max
+      ) {
         max = frame.reflector.rms;
       }
     }
@@ -607,9 +633,9 @@ export class LPCEncoder {
     const limitIndex = Math.min(this.settings.unvoicedRmsLimit, this.codingTable.rms.length - 1);
     const scale = this.codingTable.rms[limitIndex] / max;
 
-    // Scale all unvoiced frames
+    // Scale all unvoiced frames (excluding SILENCE frames)
     for (const frame of frames) {
-      if (frame.reflector.isUnvoiced()) {
+      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
         frame.reflector.rms = frame.reflector.rms * scale;
       }
     }
@@ -618,11 +644,13 @@ export class LPCEncoder {
   /**
    * Apply unvoiced multiplier to all unvoiced frames (BlueWizard RMSNormalizer.m lines 39-44)
    * This is ALWAYS applied, regardless of normalization settings
+   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) to preserve them
    */
   private applyUnvoicedMultiplier(frames: FrameData[]): void {
+    const SILENCE_RMS_THRESHOLD = 26.0;
     const multiplier = this.settings.unvoicedMultiplier;
     for (const frame of frames) {
-      if (frame.reflector.isUnvoiced()) {
+      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
         frame.reflector.rms *= multiplier;
       }
     }
