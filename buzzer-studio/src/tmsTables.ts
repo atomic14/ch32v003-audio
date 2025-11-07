@@ -208,6 +208,9 @@ export const tables: { [key: string]: TMSCoeffs } = {
   tms5200,
 };
 
+// Type for chip variant selection
+export type ChipVariant = 'tms5220' | 'tms5100' | 'tms5200';
+
 // Helper class for coding tables
 export class CodingTable {
   private chip: TMSCoeffs;
@@ -217,7 +220,7 @@ export class CodingTable {
   public rms = RMS_TABLE;
   public kStopFrameIndex = 15;
 
-  constructor(variant: 'tms5220' | 'tms5100' | 'tms5200') {
+  constructor(variant: ChipVariant) {
     this.chip = tables[variant];
 
     // Normalize K tables to -1.0 to 1.0 range
@@ -236,6 +239,26 @@ export class CodingTable {
       this.chip.pitch_bits, // 2: pitch
       ...this.chip.kbits, // 3-12: K1-K10
     ];
+  }
+
+  // Static method to get raw chip configuration for a variant
+  static getChipConfig(variant: ChipVariant): TMSCoeffs {
+    return tables[variant];
+  }
+
+  // Get synthesis lookup tables (quantized for playback)
+  // K1/K2 are 16-bit signed (Q15), K3-K10 are 8-bit signed (Q7)
+  static getSynthesisK(variant: ChipVariant, kIndex: number): number[] {
+    const chip = tables[variant];
+    const ktable = chip.ktable[kIndex];
+
+    if (kIndex < 2) {
+      // K1 and K2: 16-bit signed, scale by 64 (32768 / 512)
+      return ktable.map(v => Math.round(v * 64));
+    } else {
+      // K3-K10: 8-bit signed, scale by 0.25 (128 / 512)
+      return ktable.map(v => Math.round(v / 4));
+    }
   }
 
   kBinFor(k: number): number[] {
