@@ -87,6 +87,7 @@ export class TalkieStream {
   private periodCounter = 0;
   private synthRand = 0;
   private finished = false;
+  private stopFramePending = false;
   private totalSamplesGenerated = 0;
   private frameSampleStarts: number[] = [];
 
@@ -122,6 +123,7 @@ export class TalkieStream {
     this.periodCounter = 0;
     this.synthRand = 1;
     this.finished = false;
+    this.stopFramePending = false;
     this.synthPeriod = 0;
     this.synthEnergy = 0;
     this.synthK1 = this.synthK2 = 0;
@@ -229,7 +231,8 @@ export class TalkieStream {
       return;
     }
 
-    // Special case: STOP frame - no interpolation
+    // Special case: STOP frame - decay to zero over one frame
+    // TI's hardware outputs a decaying energy ramp to zero, not an immediate cutoff
     if (energy === FRAME_TYPE_STOP) {
       this.targetEnergy = 0;
       this.targetPeriod = 0;
@@ -243,20 +246,9 @@ export class TalkieStream {
       this.targetK8 = 0;
       this.targetK9 = 0;
       this.targetK10 = 0;
-      // Snap frameStart to target immediately (inhibit interpolation)
-      this.frameStartEnergy = 0;
-      this.frameStartPeriod = 0;
-      this.frameStartK1 = 0;
-      this.frameStartK2 = 0;
-      this.frameStartK3 = 0;
-      this.frameStartK4 = 0;
-      this.frameStartK5 = 0;
-      this.frameStartK6 = 0;
-      this.frameStartK7 = 0;
-      this.frameStartK8 = 0;
-      this.frameStartK9 = 0;
-      this.frameStartK10 = 0;
-      this.finished = true;
+      // Allow interpolation from current frameStart values to zero targets
+      // This creates the decay ramp over the next 200 samples
+      this.stopFramePending = true;
       return;
     }
 
@@ -339,6 +331,11 @@ export class TalkieStream {
     const NOISE_POLY = 0xb800;
 
     if (this.sampleCounter >= SAMPLES_PER_FRAME) {
+      // If we just completed a STOP frame's decay ramp, we're done
+      if (this.stopFramePending) {
+        this.finished = true;
+        return 0;
+      }
       this.processNextFrame();
       this.sampleCounter = 0;
       // Record the start sample index of this new frame
