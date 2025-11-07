@@ -202,8 +202,30 @@ export class TalkieStream {
     // Special case: SILENCE frame - no interpolation
     if (energy === FRAME_TYPE_SILENCE) {
       this.targetEnergy = 0;
+      this.targetPeriod = 0;
+      this.targetK1 = 0;
+      this.targetK2 = 0;
+      this.targetK3 = 0;
+      this.targetK4 = 0;
+      this.targetK5 = 0;
+      this.targetK6 = 0;
+      this.targetK7 = 0;
+      this.targetK8 = 0;
+      this.targetK9 = 0;
+      this.targetK10 = 0;
       // Snap frameStart to target immediately (inhibit interpolation)
       this.frameStartEnergy = 0;
+      this.frameStartPeriod = 0;
+      this.frameStartK1 = 0;
+      this.frameStartK2 = 0;
+      this.frameStartK3 = 0;
+      this.frameStartK4 = 0;
+      this.frameStartK5 = 0;
+      this.frameStartK6 = 0;
+      this.frameStartK7 = 0;
+      this.frameStartK8 = 0;
+      this.frameStartK9 = 0;
+      this.frameStartK10 = 0;
       return;
     }
 
@@ -254,12 +276,32 @@ export class TalkieStream {
       this.targetK4 = this.synthK4Table[this.getBits(4)];
 
       if (this.targetPeriod) {
+        // Voiced frame: read K5-K10
         this.targetK5 = this.synthK5Table[this.getBits(4)];
         this.targetK6 = this.synthK6Table[this.getBits(4)];
         this.targetK7 = this.synthK7Table[this.getBits(4)];
         this.targetK8 = this.synthK8Table[this.getBits(3)];
         this.targetK9 = this.synthK9Table[this.getBits(3)];
         this.targetK10 = this.synthK10Table[this.getBits(3)];
+      } else {
+        // Unvoiced frame: K5-K10 not encoded, set to 0
+        this.targetK5 = 0;
+        this.targetK6 = 0;
+        this.targetK7 = 0;
+        this.targetK8 = 0;
+        this.targetK9 = 0;
+        this.targetK10 = 0;
+      }
+    } else {
+      // REPEAT frame: K parameters stay unchanged, but if transitioning to unvoiced,
+      // we should zero out K5-K10 since they're not used in unvoiced synthesis
+      if (!this.targetPeriod) {
+        this.targetK5 = 0;
+        this.targetK6 = 0;
+        this.targetK7 = 0;
+        this.targetK8 = 0;
+        this.targetK9 = 0;
+        this.targetK10 = 0;
       }
     }
 
@@ -310,7 +352,8 @@ export class TalkieStream {
     // Linear interpolation of parameters from frameStart to target
     // interpFactor goes from 0.0 (start of frame) to 1.0 (end of frame)
     // The original TMS5220 hardware interpolates energy, pitch, and K coefficients
-    const interpFactor = this.sampleCounter / SAMPLES_PER_FRAME;
+    // Using (SAMPLES_PER_FRAME - 1) ensures the last sample reaches exactly 1.0
+    const interpFactor = this.sampleCounter / (SAMPLES_PER_FRAME - 1);
 
     this.synthEnergy = Math.floor(
       this.frameStartEnergy + (this.targetEnergy - this.frameStartEnergy) * interpFactor
@@ -419,10 +462,10 @@ export class TalkieStream {
       samples.push(this.nextSample());
     }
 
-    // Convert to Float32Array normalized to -1.0 to 1.0
+    // Convert to Float32Array
     const float32 = new Float32Array(samples.length);
     for (let i = 0; i < samples.length; i++) {
-      float32[i] = samples[i] / 32768.0;
+      float32[i] = samples[i];
     }
 
     // Apply output de-emphasis filter if requested
@@ -434,6 +477,23 @@ export class TalkieStream {
         const current = float32[i] * 0.07 + prev * 0.93;
         float32[i] = current;
         prev = current;
+      }
+    }
+
+    // Normalize to -1.0 to 1.0 range based on actual peak value
+    let maxAbsValue = 0;
+    for (let i = 0; i < float32.length; i++) {
+      const absValue = Math.abs(float32[i]);
+      if (absValue > maxAbsValue) {
+        maxAbsValue = absValue;
+      }
+    }
+
+    // Avoid division by zero and ensure we have meaningful audio
+    if (maxAbsValue > 0) {
+      const scale = 1.0 / maxAbsValue;
+      for (let i = 0; i < float32.length; i++) {
+        float32[i] *= scale;
       }
     }
 
