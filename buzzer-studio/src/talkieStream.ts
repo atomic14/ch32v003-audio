@@ -29,6 +29,34 @@ export class TalkieStream {
   private synthK9 = 0;
   private synthK10 = 0;
 
+  // Target parameters for interpolation
+  private targetEnergy = 0;
+  private targetPeriod = 0;
+  private targetK1 = 0;
+  private targetK2 = 0;
+  private targetK3 = 0;
+  private targetK4 = 0;
+  private targetK5 = 0;
+  private targetK6 = 0;
+  private targetK7 = 0;
+  private targetK8 = 0;
+  private targetK9 = 0;
+  private targetK10 = 0;
+
+  // Frame start parameters (for interpolation)
+  private frameStartEnergy = 0;
+  private frameStartPeriod = 0;
+  private frameStartK1 = 0;
+  private frameStartK2 = 0;
+  private frameStartK3 = 0;
+  private frameStartK4 = 0;
+  private frameStartK5 = 0;
+  private frameStartK6 = 0;
+  private frameStartK7 = 0;
+  private frameStartK8 = 0;
+  private frameStartK9 = 0;
+  private frameStartK10 = 0;
+
   private chip: TMSCoeffs = CodingTable.getChipConfig('tms5220');
   private pitchBits = 6;
 
@@ -61,6 +89,9 @@ export class TalkieStream {
   private finished = false;
   private totalSamplesGenerated = 0;
   private frameSampleStarts: number[] = [];
+
+  // RC filter state for 3.6KHz output filtering (original hardware)
+  private rcFilterState = 0;
 
   constructor() {}
 
@@ -96,11 +127,22 @@ export class TalkieStream {
     this.synthK1 = this.synthK2 = 0;
     this.synthK3 = this.synthK4 = this.synthK5 = this.synthK6 = 0;
     this.synthK7 = this.synthK8 = this.synthK9 = this.synthK10 = 0;
+    this.targetEnergy = 0;
+    this.targetPeriod = 0;
+    this.targetK1 = this.targetK2 = 0;
+    this.targetK3 = this.targetK4 = this.targetK5 = this.targetK6 = 0;
+    this.targetK7 = this.targetK8 = this.targetK9 = this.targetK10 = 0;
+    this.frameStartEnergy = 0;
+    this.frameStartPeriod = 0;
+    this.frameStartK1 = this.frameStartK2 = 0;
+    this.frameStartK3 = this.frameStartK4 = this.frameStartK5 = this.frameStartK6 = 0;
+    this.frameStartK7 = this.frameStartK8 = this.frameStartK9 = this.frameStartK10 = 0;
     this.x0 = this.x1 = this.x2 = this.x3 = this.x4 = 0;
     this.x5 = this.x6 = this.x7 = this.x8 = this.x9 = 0;
     this.sampleCounter = SAMPLES_PER_FRAME;
     this.totalSamplesGenerated = 0;
     this.frameSampleStarts = [];
+    this.rcFilterState = 0;
   }
 
   hasNext(): boolean {
@@ -141,44 +183,108 @@ export class TalkieStream {
   }
 
   private processNextFrame(): void {
+    // Save current target as frame start (where we'll interpolate from)
+    this.frameStartEnergy = this.targetEnergy;
+    this.frameStartPeriod = this.targetPeriod;
+    this.frameStartK1 = this.targetK1;
+    this.frameStartK2 = this.targetK2;
+    this.frameStartK3 = this.targetK3;
+    this.frameStartK4 = this.targetK4;
+    this.frameStartK5 = this.targetK5;
+    this.frameStartK6 = this.targetK6;
+    this.frameStartK7 = this.targetK7;
+    this.frameStartK8 = this.targetK8;
+    this.frameStartK9 = this.targetK9;
+    this.frameStartK10 = this.targetK10;
+
     const energy = this.getBits(4);
 
+    // Special case: SILENCE frame - no interpolation
     if (energy === FRAME_TYPE_SILENCE) {
-      this.synthEnergy = 0;
-    } else if (energy === FRAME_TYPE_STOP) {
-      this.synthEnergy = 0;
-      this.synthK1 = 0;
-      this.synthK2 = 0;
-      this.synthK3 = 0;
-      this.synthK4 = 0;
-      this.synthK5 = 0;
-      this.synthK6 = 0;
-      this.synthK7 = 0;
-      this.synthK8 = 0;
-      this.synthK9 = 0;
-      this.synthK10 = 0;
+      this.targetEnergy = 0;
+      // Snap frameStart to target immediately (inhibit interpolation)
+      this.frameStartEnergy = 0;
+      return;
+    }
+
+    // Special case: STOP frame - no interpolation
+    if (energy === FRAME_TYPE_STOP) {
+      this.targetEnergy = 0;
+      this.targetPeriod = 0;
+      this.targetK1 = 0;
+      this.targetK2 = 0;
+      this.targetK3 = 0;
+      this.targetK4 = 0;
+      this.targetK5 = 0;
+      this.targetK6 = 0;
+      this.targetK7 = 0;
+      this.targetK8 = 0;
+      this.targetK9 = 0;
+      this.targetK10 = 0;
+      // Snap frameStart to target immediately (inhibit interpolation)
+      this.frameStartEnergy = 0;
+      this.frameStartPeriod = 0;
+      this.frameStartK1 = 0;
+      this.frameStartK2 = 0;
+      this.frameStartK3 = 0;
+      this.frameStartK4 = 0;
+      this.frameStartK5 = 0;
+      this.frameStartK6 = 0;
+      this.frameStartK7 = 0;
+      this.frameStartK8 = 0;
+      this.frameStartK9 = 0;
+      this.frameStartK10 = 0;
       this.finished = true;
-    } else {
-      this.synthEnergy = this.chip.energytable[energy];
-      const repeat = this.getBits(1);
-      this.synthPeriod = this.chip.pitchtable[this.getBits(this.pitchBits)];
+      return;
+    }
 
-      if (!repeat) {
-        this.synthK1 = this.synthK1Table[this.getBits(5)];
-        this.synthK2 = this.synthK2Table[this.getBits(5)];
-        this.synthK3 = this.synthK3Table[this.getBits(4)];
-        this.synthK4 = this.synthK4Table[this.getBits(4)];
+    // Normal frame: read energy, repeat bit, and pitch
+    this.targetEnergy = this.chip.energytable[energy];
+    const repeat = this.getBits(1);
+    this.targetPeriod = this.chip.pitchtable[this.getBits(this.pitchBits)];
 
-        if (this.synthPeriod) {
-          this.synthK5 = this.synthK5Table[this.getBits(4)];
-          this.synthK6 = this.synthK6Table[this.getBits(4)];
-          this.synthK7 = this.synthK7Table[this.getBits(4)];
-          this.synthK8 = this.synthK8Table[this.getBits(3)];
-          this.synthK9 = this.synthK9Table[this.getBits(3)];
-          this.synthK10 = this.synthK10Table[this.getBits(3)];
-        }
+    // Special case: REPEAT frame - reuse previous K parameters (no new bits read)
+    // Target K values stay unchanged from previous frame, so interpolation
+    // will naturally go from previous target to same target (= no change)
+    if (!repeat) {
+      // Non-repeat frame: read new K parameters
+      this.targetK1 = this.synthK1Table[this.getBits(5)];
+      this.targetK2 = this.synthK2Table[this.getBits(5)];
+      this.targetK3 = this.synthK3Table[this.getBits(4)];
+      this.targetK4 = this.synthK4Table[this.getBits(4)];
+
+      if (this.targetPeriod) {
+        this.targetK5 = this.synthK5Table[this.getBits(4)];
+        this.targetK6 = this.synthK6Table[this.getBits(4)];
+        this.targetK7 = this.synthK7Table[this.getBits(4)];
+        this.targetK8 = this.synthK8Table[this.getBits(3)];
+        this.targetK9 = this.synthK9Table[this.getBits(3)];
+        this.targetK10 = this.synthK10Table[this.getBits(3)];
       }
     }
+
+    // Special case: Voiced ↔ unvoiced transition - inhibit interpolation
+    // Smoothing between two completely different excitation modes causes pops
+    const currentVoiced = this.targetPeriod !== 0;
+    const previousVoiced = this.frameStartPeriod !== 0;
+    const isTransition = previousVoiced !== currentVoiced;
+
+    if (isTransition) {
+      // Snap to target immediately (no interpolation)
+      this.frameStartEnergy = this.targetEnergy;
+      this.frameStartPeriod = this.targetPeriod;
+      this.frameStartK1 = this.targetK1;
+      this.frameStartK2 = this.targetK2;
+      this.frameStartK3 = this.targetK3;
+      this.frameStartK4 = this.targetK4;
+      this.frameStartK5 = this.targetK5;
+      this.frameStartK6 = this.targetK6;
+      this.frameStartK7 = this.targetK7;
+      this.frameStartK8 = this.targetK8;
+      this.frameStartK9 = this.targetK9;
+      this.frameStartK10 = this.targetK10;
+    }
+    // Otherwise, normal interpolation from frameStart to target will happen in nextSample()
   }
 
   nextSample(): number {
@@ -200,6 +306,48 @@ export class TalkieStream {
     if (this.finished) {
       return 0;
     }
+
+    // Linear interpolation of parameters from frameStart to target
+    // interpFactor goes from 0.0 (start of frame) to 1.0 (end of frame)
+    // The original TMS5220 hardware interpolates energy, pitch, and K coefficients
+    const interpFactor = this.sampleCounter / SAMPLES_PER_FRAME;
+
+    this.synthEnergy = Math.floor(
+      this.frameStartEnergy + (this.targetEnergy - this.frameStartEnergy) * interpFactor
+    );
+    this.synthPeriod = Math.floor(
+      this.frameStartPeriod + (this.targetPeriod - this.frameStartPeriod) * interpFactor
+    );
+    this.synthK1 = Math.floor(
+      this.frameStartK1 + (this.targetK1 - this.frameStartK1) * interpFactor
+    );
+    this.synthK2 = Math.floor(
+      this.frameStartK2 + (this.targetK2 - this.frameStartK2) * interpFactor
+    );
+    this.synthK3 = Math.floor(
+      this.frameStartK3 + (this.targetK3 - this.frameStartK3) * interpFactor
+    );
+    this.synthK4 = Math.floor(
+      this.frameStartK4 + (this.targetK4 - this.frameStartK4) * interpFactor
+    );
+    this.synthK5 = Math.floor(
+      this.frameStartK5 + (this.targetK5 - this.frameStartK5) * interpFactor
+    );
+    this.synthK6 = Math.floor(
+      this.frameStartK6 + (this.targetK6 - this.frameStartK6) * interpFactor
+    );
+    this.synthK7 = Math.floor(
+      this.frameStartK7 + (this.targetK7 - this.frameStartK7) * interpFactor
+    );
+    this.synthK8 = Math.floor(
+      this.frameStartK8 + (this.targetK8 - this.frameStartK8) * interpFactor
+    );
+    this.synthK9 = Math.floor(
+      this.frameStartK9 + (this.targetK9 - this.frameStartK9) * interpFactor
+    );
+    this.synthK10 = Math.floor(
+      this.frameStartK10 + (this.targetK10 - this.frameStartK10) * interpFactor
+    );
 
     this.sampleCounter++;
 
@@ -252,8 +400,16 @@ export class TalkieStream {
     this.x0 = u0;
 
     const out = u0 << OUTPUT_SCALE_SHIFT;
+
+    // Apply RC low-pass filter at 3.6KHz (original hardware output filtering)
+    // First-order RC filter: y[n] = alpha * x[n] + (1 - alpha) * y[n-1]
+    // alpha = 2*pi*fc / (2*pi*fc + fs) where fc = 3600Hz, fs = 8000Hz
+    const RC_FILTER_ALPHA = 0.7387; // ~= 2*pi*3600 / (2*pi*3600 + 8000)
+    const filtered = RC_FILTER_ALPHA * out + (1 - RC_FILTER_ALPHA) * this.rcFilterState;
+    this.rcFilterState = filtered;
+
     this.totalSamplesGenerated++;
-    return out;
+    return filtered;
   }
 
   // Generate all samples and return as Float32Array for Web Audio API

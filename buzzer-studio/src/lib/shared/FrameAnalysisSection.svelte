@@ -7,7 +7,6 @@
     encodedFrameStarts: number[] | null;
     playbackFrameIndex: number;
     frameRate: number;
-    applyDeemphasis: boolean;
     playbackWhich: 'raw' | 'encoded' | null;
     isPaused: boolean;
     onTogglePlayEncoded: () => void;
@@ -23,7 +22,6 @@
     encodedFrameStarts,
     playbackFrameIndex,
     frameRate,
-    applyDeemphasis = $bindable(),
     playbackWhich,
     isPaused,
     onTogglePlayEncoded,
@@ -778,10 +776,6 @@
       <div class="waveform-header">
         <h4>LPC Encoded/Decoded Waveform</h4>
         <div style="display: flex; gap: 1rem; align-items: center;">
-          <label class="checkbox-label">
-            <input type="checkbox" bind:checked={applyDeemphasis} />
-            <span>Apply de-emphasis</span>
-          </label>
           <div style="display: flex; gap: 0.5rem; align-items: center;">
             <button class="btn btn-small" onclick={onTogglePlayEncoded}>
               {playbackWhich === 'encoded' && !isPaused ? '⏸ Pause' : '▶️ Play'}
@@ -971,14 +965,6 @@
   .btn-small {
     padding: 0.25rem 0.75rem;
     font-size: 0.85rem;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.9rem;
-    cursor: pointer;
   }
 
   .frame-timeline-container {

@@ -20,7 +20,6 @@
   let lastSampleRate = $state<number | null>(null);
   let isGenerating = $state(false);
   let normalizeWaveform = $state(true);
-  let applyDeemphasis = $state(false);
   let statusMessage = $state('');
   let statusType = $state<'info' | 'error' | 'success'>('info');
 
@@ -85,7 +84,7 @@
   let debounceTimer: number | undefined;
   $effect(() => {
     // Track reactive dependencies
-    hexInput; deviceType; applyDeemphasis;
+    hexInput; deviceType;
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
@@ -149,7 +148,7 @@
       try {
         const stream = new TalkieStream();
         stream.say(hexData, deviceType);
-        const samples = stream.generateAllSamples(applyDeemphasis);
+        const samples = stream.generateAllSamples(false);
 
         if (samples.length === 0) {
           clearCanvas();
@@ -286,7 +285,7 @@
 
       const stream = new TalkieStream();
       stream.say(hexData, deviceType);
-      const samples = stream.generateAllSamples(applyDeemphasis);
+      const samples = stream.generateAllSamples(false);
 
       if (samples.length === 0) {
         showStatus('No audio generated. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
@@ -490,10 +489,6 @@
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={normalizeWaveform} />
         Normalize waveform display
-      </label>
-      <label class="checkbox-label">
-        <input type="checkbox" bind:checked={applyDeemphasis} />
-        Apply output de-emphasis filter
       </label>
     </div>
     <div class="waveform-container">

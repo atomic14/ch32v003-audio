@@ -69,8 +69,6 @@
     endSample: 0
   });
 
-  let applyDeemphasisEncoder = $state(false);
-
   // Playback state
   let isPaused = $state(false);
   let playbackWhich = $state<'raw' | 'encoded' | null>(null);
@@ -179,7 +177,7 @@
         if (hexData) {
           const stream = new TalkieStream();
           stream.say(hexData, outputOptions.tablesVariant);
-          encodedSamples = stream.generateAllSamples(applyDeemphasisEncoder);
+          encodedSamples = stream.generateAllSamples(false);
           encodedFrameStarts = stream.getFrameSampleStarts();
         }
       }
@@ -441,7 +439,7 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     // Track changes by accessing all properties within the settings objects
     // Spreading forces Svelte to track each property for reactivity
     // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    ({ ...encoderSettings, ...outputOptions, applyDeemphasisEncoder });
+    ({ ...encoderSettings, ...outputOptions });
 
     if (canEncode) {
       void encodeAudio();
@@ -507,7 +505,6 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
       encodedFrameStarts={encodedFrameStarts}
       playbackFrameIndex={playbackFrameIndex}
       frameRate={encoderSettings.frameRate}
-      bind:applyDeemphasis={applyDeemphasisEncoder}
       playbackWhich={playbackWhich}
       isPaused={isPaused}
       onTogglePlayEncoded={togglePlayEncoded}
