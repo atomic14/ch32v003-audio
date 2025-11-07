@@ -176,7 +176,10 @@ export class LPCEncoder {
 
     // Optional: median filter for impulse noise
     if ((this.settings.medianFilterWindow ?? 0) > 0) {
-      samples = AudioPreprocessor.applyMedianFilter(samples, this.settings.medianFilterWindow as number);
+      samples = AudioPreprocessor.applyMedianFilter(
+        samples,
+        this.settings.medianFilterWindow as number
+      );
     }
 
     // Optional: light peak normalization (pre-analysis)
@@ -186,12 +189,20 @@ export class LPCEncoder {
 
     // High-pass filter (skip if cutoff is 0 or invalid)
     if (this.settings.highpassCutoff > 0 && this.settings.highpassCutoff < 4000) {
-      samples = AudioPreprocessor.applyHighPassFilter(samples, this.settings.highpassCutoff, TMS_SAMPLE_RATE);
+      samples = AudioPreprocessor.applyHighPassFilter(
+        samples,
+        this.settings.highpassCutoff,
+        TMS_SAMPLE_RATE
+      );
     }
 
     // Low-pass filter (skip if cutoff is above Nyquist or invalid)
     if (this.settings.lowpassCutoff > 0 && this.settings.lowpassCutoff <= 4000) {
-      samples = AudioPreprocessor.applyLowPassFilter(samples, this.settings.lowpassCutoff, TMS_SAMPLE_RATE);
+      samples = AudioPreprocessor.applyLowPassFilter(
+        samples,
+        this.settings.lowpassCutoff,
+        TMS_SAMPLE_RATE
+      );
     }
 
     // Apply gain
@@ -202,7 +213,11 @@ export class LPCEncoder {
     // Optional: soft noise gate (after linear filters and gain, before pre-emphasis)
     if (this.settings.noiseGateEnable && (this.settings.noiseGateThreshold ?? 0) > 0) {
       const knee = this.settings.noiseGateKnee ?? 2.0;
-      samples = AudioPreprocessor.applySoftNoiseGate(samples, this.settings.noiseGateThreshold as number, knee);
+      samples = AudioPreprocessor.applySoftNoiseGate(
+        samples,
+        this.settings.noiseGateThreshold as number,
+        knee
+      );
     }
 
     // CRITICAL: Create pitch buffer BEFORE pre-emphasis (BlueWizard line 33)
@@ -230,7 +245,12 @@ export class LPCEncoder {
 
     // Process frames (pass main buffer, pitch buffer, and original buffer for energy calculation)
     console.log(`Processing ${Math.floor(samples.length / frameSize)} frames...`);
-    let { frames, frameAnalysis } = this.processFrames(samples, pitchBuffer, pitchSamples, frameSize);
+    let { frames, frameAnalysis } = this.processFrames(
+      samples,
+      pitchBuffer,
+      pitchSamples,
+      frameSize
+    );
 
     // Temporal smoothing and hysteresis before normalization/trim
     this.applyVoicedUnvoicedSmoothing(frames);

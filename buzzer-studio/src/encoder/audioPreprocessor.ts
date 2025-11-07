@@ -130,7 +130,7 @@ export function applyButterworthLowPass2ndOrder(
   sampleRate: number
 ): Float32Array {
   // Calculate filter coefficients for 2nd-order Butterworth
-  const omega = 2 * Math.PI * cutoffHz / sampleRate;
+  const omega = (2 * Math.PI * cutoffHz) / sampleRate;
   const cos_omega = Math.cos(omega);
   const sin_omega = Math.sin(omega);
   const alpha = sin_omega / Math.sqrt(2); // Q = 1/sqrt(2) for Butterworth

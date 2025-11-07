@@ -62,17 +62,26 @@ export function estimatePitch(
     console.log('minPeriod:', minPeriod, 'maxPeriod:', maxPeriod);
     console.log('bestPeriod:', bestPeriod);
     console.log('bestQuality (normalized autocorr):', bestQuality);
-    console.log('Normalized coeffs around bestPeriod:',
-      Array.from(normalizedCoeffs.slice(Math.max(0, bestPeriod - 5), Math.min(normalizedCoeffs.length, bestPeriod + 6))));
+    console.log(
+      'Normalized coeffs around bestPeriod:',
+      Array.from(
+        normalizedCoeffs.slice(
+          Math.max(0, bestPeriod - 5),
+          Math.min(normalizedCoeffs.length, bestPeriod + 6)
+        )
+      )
+    );
 
     // Also show coefficients around period 51 (BlueWizard's result)
-    console.log('Normalized coeffs around period 51:',
-      Array.from(normalizedCoeffs.slice(46, 57)));
+    console.log('Normalized coeffs around period 51:', Array.from(normalizedCoeffs.slice(46, 57)));
 
     // Show all coefficients in range 15-115 to see the full picture
     console.log('All normalized coeffs [15-115]:');
     for (let i = 15; i <= 115; i += 10) {
-      console.log(`  periods ${i}-${i+9}:`, Array.from(normalizedCoeffs.slice(i, i+10)).map(v => v.toFixed(4)));
+      console.log(
+        `  periods ${i}-${i + 9}:`,
+        Array.from(normalizedCoeffs.slice(i, i + 10)).map((v) => v.toFixed(4))
+      );
     }
   }
 
@@ -86,7 +95,10 @@ export function estimatePitch(
 
   // Criterion 3: Check if we have a valid peak (autocorrelation quality threshold)
   if (bestQuality < cfg.pitchQualityThreshold) {
-    if (debug) console.log(`Peak too weak (${bestQuality.toFixed(3)} < ${cfg.pitchQualityThreshold}), returning 0`);
+    if (debug)
+      console.log(
+        `Peak too weak (${bestQuality.toFixed(3)} < ${cfg.pitchQualityThreshold}), returning 0`
+      );
     return { period: 0, quality: bestQuality }; // Too weak, likely unvoiced
   }
 
@@ -197,7 +209,9 @@ function correctOctaveErrors(
       ) {
         subMultiplesAreStrong = false;
         if (debug) {
-          console.log(`  multiple=${multiple}, i=${i}: subMultiplePeriod=${subMultiplePeriod}, coeff=${coefficients[subMultiplePeriod].toFixed(4)} < ${(threshold * coefficients[bestPeriod]).toFixed(4)} => weak`);
+          console.log(
+            `  multiple=${multiple}, i=${i}: subMultiplePeriod=${subMultiplePeriod}, coeff=${coefficients[subMultiplePeriod].toFixed(4)} < ${(threshold * coefficients[bestPeriod]).toFixed(4)} => weak`
+          );
         }
         break;
       }
@@ -206,7 +220,9 @@ function correctOctaveErrors(
     if (subMultiplesAreStrong) {
       finalPeriod = interpolatedPeriod / multiple;
       if (debug) {
-        console.log(`  multiple=${multiple}: ALL submultiples strong, dividing ${interpolatedPeriod} / ${multiple} = ${finalPeriod}`);
+        console.log(
+          `  multiple=${multiple}: ALL submultiples strong, dividing ${interpolatedPeriod} / ${multiple} = ${finalPeriod}`
+        );
       }
       break;
     }
@@ -267,7 +283,7 @@ function yinEstimate(
   let cumulative = 0;
   for (let tau = 1; tau <= maxTau; tau++) {
     cumulative += d[tau];
-    cmnd[tau] = d[tau] * tau / (cumulative || 1);
+    cmnd[tau] = (d[tau] * tau) / (cumulative || 1);
   }
 
   // Absolute threshold
@@ -280,8 +296,8 @@ function yinEstimate(
       const a = cmnd[tauMinus];
       const b = cmnd[tau];
       const c = cmnd[tauPlus];
-      const denom = (a - 2 * b + c);
-      const delta = Math.abs(denom) > 1e-12 ? 0.5 * (a - c) / denom : 0;
+      const denom = a - 2 * b + c;
+      const delta = Math.abs(denom) > 1e-12 ? (0.5 * (a - c)) / denom : 0;
       bestTau = tau + delta;
       break;
     }

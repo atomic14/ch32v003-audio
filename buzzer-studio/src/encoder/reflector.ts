@@ -80,7 +80,7 @@ export class Reflector {
     const epsilon = 1e-12;
 
     // Initialize
-    k[1] = -r[1] / (Math.abs(r[0]) > epsilon ? r[0] : (r[0] >= 0 ? epsilon : -epsilon));
+    k[1] = -r[1] / (Math.abs(r[0]) > epsilon ? r[0] : r[0] >= 0 ? epsilon : -epsilon);
     d[1] = r[1];
     d[2] = r[0] + k[1] * r[1];
 
@@ -98,7 +98,8 @@ export class Reflector {
         j += 1;
       }
 
-      const denom = Math.abs(d[i]) > epsilon && isFinite(d[i]) ? d[i] : (d[i] >= 0 ? epsilon : -epsilon);
+      const denom =
+        Math.abs(d[i]) > epsilon && isFinite(d[i]) ? d[i] : d[i] >= 0 ? epsilon : -epsilon;
       k[i] = -y / denom;
       if (!isFinite(k[i])) k[i] = 0;
       if (k[i] > 0.999) k[i] = 0.999;
