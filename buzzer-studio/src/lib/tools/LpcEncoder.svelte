@@ -8,7 +8,8 @@
   import FrameAnalysisSection from '../shared/FrameAnalysisSection.svelte';
   import { LPCEncoder } from '../../lpcEncoder';
   import type { EncoderSettings as EncoderSettingsType, FrameAnalysis } from '../../lpcEncoder';
-  import { TalkieStream, TalkieDevice, parseHexString } from '../../talkieStream';
+  import { TalkieStream, parseHexString } from '../../talkieStream';
+  import type { ChipVariant } from '../../tmsTables';
 
   let currentFile = $state<File | null>(null);
   let encoder = $state<LPCEncoder | null>(null);
@@ -63,7 +64,7 @@
     trimSilence: false,
     includeHexPrefix: true,
     explicitStop: true,
-    tablesVariant: 'tms5220' as 'tms5220' | 'tms5100' | 'tms5200',
+    tablesVariant: 'tms5220' as ChipVariant,
     startSample: 0,
     endSample: 0
   });
@@ -155,16 +156,6 @@
     }
   }
 
-  function getDeviceType(type: 'tms5220' | 'tms5100' | 'tms5200'): TalkieDeviceType {
-    switch (type) {
-      case 'tms5220':
-        return TalkieDevice.TMS5220;
-      case 'tms5100':
-        return TalkieDevice.TMS5100;
-      case 'tms5200':
-        return TalkieDevice.TMS5200;
-    }
-  }
 
   async function encodeAudio() {
     if (!currentFile) return;
@@ -187,8 +178,7 @@
         const hexData = parseHexString(encodedHex);
         if (hexData) {
           const stream = new TalkieStream();
-          const deviceType = getDeviceType(outputOptions.tablesVariant);
-          stream.say(hexData, deviceType);
+          stream.say(hexData, outputOptions.tablesVariant);
           encodedSamples = stream.generateAllSamples(applyDeemphasisEncoder);
           encodedFrameStarts = stream.getFrameSampleStarts();
         }

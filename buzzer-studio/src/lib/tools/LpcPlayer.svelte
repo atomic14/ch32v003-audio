@@ -1,6 +1,7 @@
 <script lang="ts">
   import Button from '../shared/Button.svelte';
-  import { TalkieStream, parseHexString, type TalkieDeviceType } from '../../talkieStream';
+  import { TalkieStream, parseHexString } from '../../talkieStream';
+  import type { ChipVariant } from '../../tmsTables';
   import randomPhrases from '../../lpc-phrases/phrases';
   import clock from '../../lpc-phrases/clock';
   import starWars from '../../lpc-phrases/star-wars';
@@ -12,7 +13,7 @@
   let audioContext = $state<AudioContext>();
   let currentSource = $state<AudioBufferSourceNode | null>(null);
   let hexInput = $state('');
-  let deviceType = $state<TalkieDeviceType>(0);
+  let deviceType = $state<ChipVariant>('tms5220');
   let isPlaying = $state(false);
   let canvas = $state<HTMLCanvasElement>();
   let currentWaveformData = $state<Float32Array | null>(null);
@@ -47,8 +48,8 @@
     return bytes.map((b) => `0x${(b & 0xff).toString(16).padStart(2, '0')}`).join(',');
   }
 
-  function mapTablesToDevice(tables: string): TalkieDeviceType {
-    return (tables && tables.toUpperCase() === 'TMS5100' ? 1 : 0) as TalkieDeviceType;
+  function mapTablesToDevice(tables: string): ChipVariant {
+    return tables && tables.toUpperCase() === 'TMS5100' ? 'tms5100' : 'tms5220';
   }
 
   function loadPhraseFromSet(setIndex: number, phraseKey: string) {
