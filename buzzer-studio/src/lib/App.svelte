@@ -5,15 +5,35 @@
   import LpcEncoder from './tools/LpcEncoder.svelte';
   import LpcPlayer from './tools/LpcPlayer.svelte';
 
-  type TabId = 'midi-converter' | 'sound-effects' | 'adpcm-converter' | 'lpc-encoder' | 'lpc-player';
+  type TabId =
+    | 'midi-converter'
+    | 'sound-effects'
+    | 'adpcm-converter'
+    | 'lpc-encoder'
+    | 'lpc-player';
 
   let activeTab = $state<TabId>('midi-converter');
 
   const tabs = [
-    { id: 'midi-converter' as TabId, icon: '🎵', label: 'MIDI Converter', component: MidiConverter },
+    {
+      id: 'midi-converter' as TabId,
+      icon: '🎵',
+      label: 'MIDI Converter',
+      component: MidiConverter,
+    },
     { id: 'sound-effects' as TabId, icon: '🔊', label: 'Sound Effects', component: SoundEffects },
-    { id: 'adpcm-converter' as TabId, icon: '📦', label: 'ADPCM Converter', component: AdpcmConverter },
-    { id: 'lpc-encoder' as TabId, icon: '🎙️', label: 'Talkie (LPC) Encoder', component: LpcEncoder },
+    {
+      id: 'adpcm-converter' as TabId,
+      icon: '📦',
+      label: 'ADPCM Converter',
+      component: AdpcmConverter,
+    },
+    {
+      id: 'lpc-encoder' as TabId,
+      icon: '🎙️',
+      label: 'Talkie (LPC) Encoder',
+      component: LpcEncoder,
+    },
     { id: 'lpc-player' as TabId, icon: '🤖', label: 'Talkie (LPC) Player', component: LpcPlayer },
   ];
 </script>
@@ -29,7 +49,7 @@
       <button
         class="tab-button"
         class:active={activeTab === tab.id}
-        onclick={() => activeTab = tab.id}
+        onclick={() => (activeTab = tab.id)}
       >
         <span class="tab-icon">{tab.icon}</span>
         <span class="tab-label">{tab.label}</span>
@@ -59,7 +79,9 @@
 
   <footer class="app-footer">
     <div class="footer-links">
-      <a href="https://github.com/atomic14/ch32v003-music" target="_blank" rel="noopener noreferrer">YouTube</a>
+      <a href="https://github.com/atomic14/ch32v003-music" target="_blank" rel="noopener noreferrer"
+        >YouTube</a
+      >
       <span class="separator">•</span>
       <a href="https://www.atomic14.com" target="_blank" rel="noopener noreferrer">Blog</a>
       <span class="separator">•</span>

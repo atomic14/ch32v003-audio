@@ -23,22 +23,37 @@ import {
   SILENCE_ENERGY_THRESHOLD,
 } from './encoder/constants';
 
+type FrameOverride = {
+  originalClassification: 'voiced' | 'unvoiced' | 'silent';
+  newClassification: 'voiced' | 'unvoiced' | 'silent';
+};
+
+export type FrameOverrides = Map<number, FrameOverride>;
+
 export interface FrameAnalysis {
   frameNumber: number;
-  isVoiced: boolean;
-  isSilent: boolean; // True if RMS will quantize to 0 (SILENCE frame)
-  pitch: number; // Period in samples
-  pitchHz: number; // Frequency in Hz
+  // Raw detected values (before decisions)
+  detectedPitch: number; // Raw detected pitch period (always set, even if unreliable)
+  detectedPitchHz: number; // Raw detected frequency
   pitchQuality: number; // Autocorrelation coefficient (0-1)
+  pitchIsReliable: boolean; // True if pitch quality meets threshold
   originalEnergy: number;
   emphasizedEnergy: number;
   energyRatio: number;
   rms: number;
   ks: number[]; // Reflection coefficients k1-k10
-  // Criterion results
+  // Decision criteria
   criterion1Pass: boolean; // Energy >= threshold
   criterion2Pass: boolean; // Energy ratio >= threshold
   criterion3Pass: boolean; // Pitch quality >= threshold
+  // Final classification (after criteria + overrides)
+  isVoiced: boolean;
+  isSilent: boolean; // True if RMS will quantize to 0 (SILENCE frame)
+  finalPitch: number; // Final pitch period used for encoding
+  finalPitchHz: number; // Final frequency used for encoding
+  // Override tracking
+  hasOverride: boolean;
+  overrideType?: 'voiced' | 'unvoiced' | 'silent';
   detectionMethod: 'energy-based' | 'k1-based';
 }
 
@@ -66,9 +81,6 @@ export interface EncoderSettings {
   // Advanced settings
   highpassCutoff: number;
   lowpassCutoff: number;
-  speed: number;
-  gain: number;
-  rawExcitation: boolean;
   // Input conditioning
   removeDC?: boolean;
   peakNormalize?: boolean;
@@ -121,7 +133,10 @@ export class LPCEncoder {
   /**
    * Encode WAV file to LPC hex data
    */
-  encodeWav(arrayBuffer: ArrayBuffer): {
+  encodeWav(
+    arrayBuffer: ArrayBuffer,
+    frameOverrides: FrameOverrides = new Map()
+  ): {
     hex: string;
     rawSamples: Float32Array;
     preprocessedSamples: Float32Array;
@@ -151,24 +166,6 @@ export class LPCEncoder {
       const end = this.settings.endSample > 0 ? this.settings.endSample : samples.length;
       console.log(`Trimming samples: ${start} to ${end}`);
       samples = samples.slice(start, end);
-    }
-
-    // Apply speed adjustment
-    if (this.settings.speed !== 1.0) {
-      console.log(`Applying speed adjustment: ${this.settings.speed}x`);
-      const newLength = Math.floor(samples.length / this.settings.speed);
-      const resampled = new Float32Array(newLength);
-      for (let i = 0; i < newLength; i++) {
-        const srcPos = i * this.settings.speed;
-        const srcIndex = Math.floor(srcPos);
-        const frac = srcPos - srcIndex;
-        if (srcIndex + 1 < samples.length) {
-          resampled[i] = samples[srcIndex] * (1 - frac) + samples[srcIndex + 1] * frac;
-        } else {
-          resampled[i] = samples[srcIndex];
-        }
-      }
-      samples = resampled;
     }
 
     // PREPROCESSING PIPELINE
@@ -206,12 +203,7 @@ export class LPCEncoder {
       );
     }
 
-    // Apply gain
-    if (this.settings.gain !== 1.0) {
-      samples = samples.map((s) => s * this.settings.gain);
-    }
-
-    // Optional: soft noise gate (after linear filters and gain, before pre-emphasis)
+    // Optional: soft noise gate (after linear filters, before pre-emphasis)
     if (this.settings.noiseGateEnable && (this.settings.noiseGateThreshold ?? 0) > 0) {
       const knee = this.settings.noiseGateKnee ?? 2.0;
       samples = AudioPreprocessor.applySoftNoiseGate(
@@ -227,7 +219,10 @@ export class LPCEncoder {
     // Apply pre-emphasis to create emphasized buffer (for voiced frames and energy ratio)
     let emphasizedSamples = samples;
     if (this.settings.preEmphasis) {
-      emphasizedSamples = AudioPreprocessor.applyPreEmphasis(samples, this.settings.preEmphasisAlpha);
+      emphasizedSamples = AudioPreprocessor.applyPreEmphasis(
+        samples,
+        this.settings.preEmphasisAlpha
+      );
     }
 
     // Prepare pitch buffer with lowpass filter for pitch estimation (uses original)
@@ -250,13 +245,11 @@ export class LPCEncoder {
       originalSamples,
       emphasizedSamples,
       pitchSamples,
-      frameSize
+      frameSize,
+      frameOverrides
     );
 
-    // Temporal smoothing and hysteresis before normalization/trim
-    this.applyVoicedUnvoicedSmoothing(frames);
-    this.applyPitchSmoothing(frames);
-    // this.applyCoefficientSmoothing(frames);
+    // Note: Smoothing has been removed for simplicity - can be added back later if needed
 
     // RMS Normalization (BlueWizard lines 71-74)
     if (this.settings.normalizeVoiced) {
@@ -353,7 +346,8 @@ export class LPCEncoder {
     originalSamples: Float32Array,
     emphasizedSamples: Float32Array,
     pitchSamples: Float32Array,
-    frameSize: number
+    frameSize: number,
+    frameOverrides: FrameOverrides
   ): { frames: FrameData[]; frameAnalysis: FrameAnalysis[] } {
     const frames: FrameData[] = [];
     const frameAnalysis: FrameAnalysis[] = [];
@@ -384,10 +378,12 @@ export class LPCEncoder {
 
       let pitch: number;
       let pitchQuality: number;
+      let pitchIsReliable: boolean;
 
       if (this.settings.overridePitch) {
         pitch = this.settings.pitchValue;
         pitchQuality = 1.0; // Assume perfect quality for overridden pitch
+        pitchIsReliable = true;
       } else {
         const pitchResult = estimatePitch(pitchFrame, {
           sampleRate: 8000,
@@ -399,6 +395,7 @@ export class LPCEncoder {
 
         pitch = pitchResult.period;
         pitchQuality = pitchResult.quality;
+        pitchIsReliable = pitchResult.isReliable;
       }
 
       // Apply pitch offset
@@ -416,7 +413,12 @@ export class LPCEncoder {
       const passesPitchQuality = pitchQuality >= this.settings.pitchQualityThreshold;
 
       // Frame is voiced if both criteria pass (skip energy ratio check)
-      const isVoicedFrame = passesEnergyThreshold && passesPitchQuality;
+      const frameIndex = frames.length;
+      const forceVoice = frameOverrides.get(frameIndex)?.newClassification === 'voiced' || false;
+      const forceUnvoiced =
+        frameOverrides.get(frameIndex)?.newClassification === 'unvoiced' || false;
+      const isVoicedFrame =
+        ((passesEnergyThreshold && passesPitchQuality) || forceVoice) && !forceUnvoiced;
 
       // Step 4: Extract LPC analysis window
       const windowStart = Math.max(0, i - Math.floor((analysisWindowSize - frameSize) / 2));
@@ -459,28 +461,74 @@ export class LPCEncoder {
 
       // Create frame data
       const frameData = new FrameData(reflector, pitch, false);
+
+      // Apply override if present
+      if (forceVoice || forceUnvoiced) {
+        frameData.voicedOverride = forceVoice; // true if forceVoice, false if forceUnvoiced
+
+        // If forcing to voiced but pitch is 0 or invalid, use a reasonable default
+        // (typical male voice is ~100-150 Hz = period of 53-80 samples at 8kHz)
+        if (forceVoice && (pitch === 0 || pitch < 10)) {
+          frameData.pitch = 60; // ~133 Hz (8000 / 60)
+          console.log(
+            `Frame ${frameIndex}: Override to voiced with default pitch 60 (original was ${pitch})`
+          );
+        }
+
+        // If forcing to unvoiced, ensure pitch is 0
+        if (forceUnvoiced) {
+          frameData.pitch = 0;
+        }
+
+        console.log(
+          `Frame ${frameIndex}: Override applied - voicedOverride=${frameData.voicedOverride}, pitch=${frameData.pitch}`
+        );
+      }
+
       frames.push(frameData);
 
       // Capture frame analysis for visualization
       // A frame will be encoded as SILENCE if RMS < 26.0 (midpoint between RMS_TABLE[0]=0.0 and RMS_TABLE[1]=52.0)
       const isSilent = reflector.rms < 26.0;
 
+      // Check if frame has an override
+      const override = frameOverrides.get(frameIndex);
+      const hasOverride = override !== undefined;
+      const overrideType = override?.newClassification;
+
+      // Determine final pitch to use (detected pitch, or use it even if unreliable when overridden)
+      let finalPitch = pitch;
+      if (overrideType === 'voiced' && pitch < 10) {
+        // Use detected pitch if available, otherwise default
+        finalPitch = pitch > 0 ? pitch : 60;
+      } else if (overrideType === 'unvoiced') {
+        finalPitch = 0;
+      }
+
       const analysis: FrameAnalysis = {
         frameNumber: frames.length - 1,
-        isVoiced: isVoicedFrame,
-        isSilent,
-        pitch,
-        pitchHz: pitch > 0 ? 8000 / pitch : 0,
+        // Raw detected values
+        detectedPitch: pitch,
+        detectedPitchHz: pitch > 0 ? 8000 / pitch : 0,
         pitchQuality,
+        pitchIsReliable,
         originalEnergy,
         emphasizedEnergy,
         energyRatio,
         rms: reflector.rms,
-        ks: reflector.ks.slice(), // Copy reflection coefficients
+        ks: reflector.ks.slice(),
         // Criterion results
         criterion1Pass: passesEnergyThreshold,
         criterion2Pass: passesEnergyRatio,
         criterion3Pass: passesPitchQuality,
+        // Final classification
+        isVoiced: isVoicedFrame,
+        isSilent,
+        finalPitch,
+        finalPitchHz: finalPitch > 0 ? 8000 / finalPitch : 0,
+        // Override tracking
+        hasOverride,
+        overrideType,
         detectionMethod: 'energy-based',
       };
       frameAnalysis.push(analysis);
@@ -493,84 +541,6 @@ export class LPCEncoder {
   private frameIsVoiced(frame: FrameData): boolean {
     if (frame.voicedOverride !== null) return frame.voicedOverride;
     return frame.reflector.isVoiced();
-  }
-
-  /** Median-filter and hysteresis the voiced/unvoiced state to reduce toggling */
-  private applyVoicedUnvoicedSmoothing(frames: FrameData[]): void {
-    const initial: boolean[] = frames.map((f) => f.reflector.isVoiced());
-    const window = 5;
-    const half = Math.floor(window / 2);
-    const smoothed: boolean[] = new Array<boolean>(initial.length).fill(false);
-
-    for (let i = 0; i < initial.length; i++) {
-      let voicedCount = 0;
-      let total = 0;
-      for (let j = -half; j <= half; j++) {
-        const idx = i + j;
-        if (idx >= 0 && idx < initial.length) {
-          total += 1;
-          voicedCount += initial[idx] ? 1 : 0;
-        }
-      }
-      smoothed[i] = voicedCount >= Math.ceil(total / 2);
-    }
-
-    // Hysteresis: discourage rapid state flips by requiring two consecutive frames to flip
-    let prev = smoothed.length > 0 ? smoothed[0] : false;
-    for (let i = 0; i < smoothed.length; i++) {
-      const current = smoothed[i];
-      if (current !== prev) {
-        const next = i + 1 < smoothed.length ? smoothed[i + 1] : current;
-        if (next !== current) {
-          smoothed[i] = prev; // suppress isolated flip
-        }
-      }
-      prev = smoothed[i];
-    }
-
-    for (let i = 0; i < frames.length; i++) {
-      frames[i].voicedOverride = smoothed[i];
-      if (!smoothed[i]) {
-        frames[i].pitch = 0; // ensure unvoiced pitch is zero after smoothing
-      }
-    }
-  }
-
-  /** Smooth pitch with continuity constraints and octave snap */
-  private applyPitchSmoothing(frames: FrameData[]): void {
-    let previousPitch = 0;
-    let previousVoiced = false;
-    for (let i = 0; i < frames.length; i++) {
-      const isVoiced = this.frameIsVoiced(frames[i]);
-      let pitch = frames[i].pitch;
-      if (!isVoiced) {
-        frames[i].pitch = 0;
-        previousVoiced = false;
-        previousPitch = 0;
-        continue;
-      }
-
-      if (previousVoiced && previousPitch > 0 && pitch > 0) {
-        const ratio = pitch / previousPitch;
-        // Octave snap if very close to 2x or 0.5x
-        if (ratio > 1.8 && ratio < 2.2) {
-          pitch = previousPitch * 2;
-        } else if (ratio > 0.45 && ratio < 0.55) {
-          pitch = previousPitch * 0.5;
-        }
-        // Limit per-frame change to ±25%
-        const minAllowed = previousPitch * 0.75;
-        const maxAllowed = previousPitch * 1.25;
-        if (pitch < minAllowed) pitch = minAllowed;
-        if (pitch > maxAllowed) pitch = maxAllowed;
-        // Low-pass smoothing
-        pitch = 0.7 * previousPitch + 0.3 * pitch;
-      }
-
-      frames[i].pitch = pitch;
-      previousPitch = pitch;
-      previousVoiced = isVoiced;
-    }
   }
 
   /**

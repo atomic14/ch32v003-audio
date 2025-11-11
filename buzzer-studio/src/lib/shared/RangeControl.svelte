@@ -22,13 +22,6 @@
   <label>
     {label}
     <span class="value">{value}{unit}</span>
-    <input
-      type="range"
-      {min}
-      {max}
-      {step}
-      {value}
-      oninput={handleInput}
-    />
+    <input type="range" {min} {max} {step} {value} oninput={handleInput} />
   </label>
 </div>

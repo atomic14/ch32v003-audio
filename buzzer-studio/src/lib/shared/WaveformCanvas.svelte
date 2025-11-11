@@ -36,7 +36,7 @@
     onPause,
     onStop,
     onSeekFrame,
-    onSeek
+    onSeek,
   }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement>();
@@ -203,8 +203,11 @@
     let globalXEnd = 0;
 
     if (encodedFrameStarts && encodedFrameStarts.length > 0) {
-      const start = encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
-      const end = encodedFrameStarts[Math.min(playbackFrameIndex + 1, encodedFrameStarts.length)] ?? samples.length;
+      const start =
+        encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
+      const end =
+        encodedFrameStarts[Math.min(playbackFrameIndex + 1, encodedFrameStarts.length)] ??
+        samples.length;
       globalXStart = Math.round(start / SAMPLES_PER_PIXEL);
       globalXEnd = Math.round(end / SAMPLES_PER_PIXEL);
     } else {
@@ -278,24 +281,29 @@
 
     // Convert to frame index
     const samplesPerFrame = Math.floor(8000 / frameRate);
-    const frameIndex = Math.min(frameAnalysisData.length - 1, Math.floor(sampleIndex / samplesPerFrame));
+    const frameIndex = Math.min(
+      frameAnalysisData.length - 1,
+      Math.floor(sampleIndex / samplesPerFrame)
+    );
 
     onSeek(frameIndex);
   }
 
-  // Redraw waveform when samples or scroll changes
+  // Redraw waveform when samples change
+  // Props change when parent creates new timestamped objects, triggering reliable redraws
   $effect(() => {
     if (samples && canvas && scrollContainer) {
       drawWaveform();
     }
   });
 
-  // Only redraw playhead overlay on playback frame changes
-  $effect(() => {
-    if (overlayCanvas && samples) {
-      drawPlayhead();
-    }
-  });
+  // Expose drawPlayhead for imperative calls from parent
+  // NOTE: Don't make this an $effect! That creates a reactive dependency on playbackFrameIndex
+  // which causes redraws 60 times per second during playback.
+  // The parent component will call this explicitly when needed.
+  export function updatePlayhead() {
+    drawPlayhead();
+  }
 
   // Set up scroll listener
   $effect(() => {
@@ -340,22 +348,13 @@
         >
           Frame ⟩
         </button>
-        <button
-          class="btn btn-small"
-          onclick={onStop}
-          disabled={!canSeek}
-        >
-          ■ Stop
-        </button>
+        <button class="btn btn-small" onclick={onStop} disabled={!canSeek}> ■ Stop </button>
       </div>
     {/if}
   </div>
   <div class="waveform-scroll-container" bind:this={scrollContainer}>
     <div class="waveform-spacer" bind:this={waveformSpacer}>
-      <canvas
-        bind:this={canvas}
-        class="waveform-canvas"
-      ></canvas>
+      <canvas bind:this={canvas} class="waveform-canvas"></canvas>
       <canvas
         bind:this={overlayCanvas}
         class="waveform-canvas waveform-overlay"
@@ -363,7 +362,9 @@
       ></canvas>
     </div>
   </div>
-  <p class="waveform-info">{samples.length} samples ({(samples.length / 8000).toFixed(2)}s), 8kHz</p>
+  <p class="waveform-info">
+    {samples.length} samples ({(samples.length / 8000).toFixed(2)}s), 8kHz
+  </p>
 </div>
 
 <style>

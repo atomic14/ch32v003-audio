@@ -29,10 +29,12 @@
   // Computed values
   let showContent = $derived(currentMidi !== null);
   let tracksToShow = $derived(
-    currentMidi ? currentMidi.tracks.filter(track => showEmptyTracks || track.noteCount > 0) : []
+    currentMidi ? currentMidi.tracks.filter((track) => showEmptyTracks || track.noteCount > 0) : []
   );
   let emptyTracksCount = $derived(
-    currentMidi ? currentMidi.tracks.length - currentMidi.tracks.filter(t => t.noteCount > 0).length : 0
+    currentMidi
+      ? currentMidi.tracks.length - currentMidi.tracks.filter((t) => t.noteCount > 0).length
+      : 0
   );
   let showExportSection = $derived(selectedTrackIndices.size > 0);
   let totalStreams = $derived(processedTracks.reduce((sum, t) => sum + t.streams.length, 0));
@@ -174,7 +176,7 @@
   }
 
   function reset() {
-    trackPlayers.forEach(player => player.stop());
+    trackPlayers.forEach((player) => player.stop());
     trackPlayers.clear();
     trackVisualizers.clear();
     trackPlayStates.clear();
@@ -198,7 +200,7 @@
     return {
       destroy() {
         // Cleanup if needed
-      }
+      },
     };
   }
 </script>
@@ -215,7 +217,9 @@
         <li>✅ Select one or more tracks to export</li>
         <li>💾 Download C code with note frequencies and timing</li>
       </ol>
-      <p class="help-text">Play individual tracks by bit-banging a buzzer or using PWM on a GPIO pin.</p>
+      <p class="help-text">
+        Play individual tracks by bit-banging a buzzer or using PWM on a GPIO pin.
+      </p>
       <p class="help-text">For polyphonic playback you will need to mix the streams together.</p>
     </div>
   </header>
@@ -229,9 +233,15 @@
         ondrop={handleDrop}
         ondragover={handleDragOver}
         onclick={() => fileInputElement?.click()}
-        onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? fileInputElement?.click() : null}
+        onkeydown={(e) => (e.key === 'Enter' || e.key === ' ' ? fileInputElement?.click() : null)}
       >
-        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg
+          class="upload-icon"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="17 8 12 3 7 8"></polyline>
           <line x1="12" y1="3" x2="12" y2="15"></line>
@@ -254,8 +264,10 @@
           <div class="file-stats">
             <p><strong>File:</strong> {fileName}</p>
             <p>
-              <strong>Total Tracks:</strong> {currentMidi?.tracks.length}
-              ({currentMidi?.tracks.filter(t => t.noteCount > 0).length} with notes{#if emptyTracksCount > 0}, {emptyTracksCount} empty{/if})
+              <strong>Total Tracks:</strong>
+              {currentMidi?.tracks.length}
+              ({currentMidi?.tracks.filter((t) => t.noteCount > 0).length} with notes{#if emptyTracksCount > 0},
+                {emptyTracksCount} empty{/if})
             </p>
           </div>
           {#if emptyTracksCount > 0}
@@ -271,7 +283,10 @@
 
       <div class="tracks-section">
         <h3>Select Tracks to Export</h3>
-        <p class="section-hint">Select one or more tracks. Polyphonic tracks will be automatically split into multiple streams.</p>
+        <p class="section-hint">
+          Select one or more tracks. Polyphonic tracks will be automatically split into multiple
+          streams.
+        </p>
         <div class="tracks-list">
           {#if tracksToShow.length === 0}
             <p class="no-tracks-message">No tracks with notes found in this file.</p>
@@ -290,7 +305,9 @@
                       />
                       <label for="track-checkbox-{track.index}" class="track-checkbox-label">
                         <div class="track-name">{track.name}</div>
-                        <div class="track-details">Track {track.index + 1} • {track.noteCount} notes</div>
+                        <div class="track-details">
+                          Track {track.index + 1} • {track.noteCount} notes
+                        </div>
                       </label>
                     </div>
                   </div>
@@ -301,10 +318,7 @@
                     ></canvas>
                   </div>
                   <div class="track-player-controls">
-                    <Button
-                      onclick={() => toggleTrackPlayback(track.index)}
-                      variant="primary"
-                    >
+                    <Button onclick={() => toggleTrackPlayback(track.index)} variant="primary">
                       {trackPlayStates.get(track.index) ? 'Pause' : 'Play'}
                     </Button>
                     <Button
@@ -348,22 +362,27 @@
             </div>
           </div>
           <div class="export-controls">
-            <Button onclick={() => exportCode('header')} variant="secondary">Download Header (.h)</Button>
-            <Button onclick={() => exportCode('impl')} variant="secondary">Download Implementation (.cpp)</Button>
-            <Button onclick={() => exportCode('both')} variant="primary">Download Both Files</Button>
+            <Button onclick={() => exportCode('header')} variant="secondary"
+              >Download Header (.h)</Button
+            >
+            <Button onclick={() => exportCode('impl')} variant="secondary"
+              >Download Implementation (.cpp)</Button
+            >
+            <Button onclick={() => exportCode('both')} variant="primary">Download Both Files</Button
+            >
           </div>
           <div class="code-tabs">
             <button
               class="code-tab"
               class:active={activeCodeTab === 'header'}
-              onclick={() => activeCodeTab = 'header'}
+              onclick={() => (activeCodeTab = 'header')}
             >
               Header File (.h)
             </button>
             <button
               class="code-tab"
               class:active={activeCodeTab === 'impl'}
-              onclick={() => activeCodeTab = 'impl'}
+              onclick={() => (activeCodeTab = 'impl')}
             >
               Implementation (.cpp)
             </button>

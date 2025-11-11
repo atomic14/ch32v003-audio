@@ -15,13 +15,31 @@
   let encoder = $state<LPCEncoder | null>(null);
   let encodedHex = $state('');
   let rawSamples = $state<Float32Array | null>(null);
-  let encodedSamples = $state<Float32Array | null>(null);
-  let encodedFrameStarts = $state<number[] | null>(null);
+
+  // Wrapper types with timestamps for reliable reactive tracking
+  type EncodedData = {
+    samples: Float32Array;
+    frameStarts: number[] | null;
+    timestamp: number;
+  };
+  type FrameAnalysisSet = {
+    frames: FrameAnalysis[];
+    timestamp: number;
+  };
+
+  let encodedData = $state<EncodedData | null>(null);
+  let frameAnalysisSet = $state<FrameAnalysisSet | null>(null);
+
   let audioContext = $state<AudioContext | null>(null);
   let currentSource = $state<AudioBufferSourceNode | null>(null);
-  let frameAnalysisData = $state<FrameAnalysis[]>([]);
+  type FrameOverride = {
+    originalClassification: 'voiced' | 'unvoiced' | 'silent';
+    newClassification: 'voiced' | 'unvoiced' | 'silent';
+  };
+
   let fileName = $state('');
   let statusMessage = $state('');
+  let frameOverrides = $state<Map<number, FrameOverride>>(new Map());
 
   // Settings state
   let encoderSettings = $state({
@@ -34,15 +52,14 @@
     normalizeUnvoiced: true,
     unvoicedRmsLimit: 14,
     // Input conditioning
-    removeDC: true,
     peakNormalize: false,
     medianFilterWindow: 0,
     noiseGateEnable: false,
     noiseGateThreshold: 0.02,
     noiseGateKnee: 2.0,
     // Advanced settings
-    minFrequency: 50,
-    maxFrequency: 500,
+    minPitch: 50,
+    maxPitch: 500,
     submultipleThreshold: 0.9,
     overridePitch: false,
     pitchValue: 0,
@@ -55,9 +72,6 @@
     windowWidth: 2,
     highpassCutoff: 0,
     lowpassCutoff: 48000,
-    speed: 1.0,
-    gain: 1.0,
-    rawExcitation: false
   });
 
   let outputOptions = $state({
@@ -66,7 +80,7 @@
     explicitStop: true,
     tablesVariant: 'tms5220' as ChipVariant,
     startSample: 0,
-    endSample: 0
+    endSample: 0,
   });
 
   // Playback state
@@ -79,11 +93,15 @@
   let playbackFrameIndex = $state(-1);
   let playbackRaf: number | null = $state(null);
 
+  // Component references for imperative playhead updates
+  let waveformCanvasRef = $state<WaveformCanvas | null>(null);
+  let frameAnalysisSectionRef = $state<FrameAnalysisSection | null>(null);
+
   // Computed
   let showResults = $derived(encodedHex !== '');
   let canEncode = $derived(rawSamples !== null);
   let showWaveforms = $derived(rawSamples !== null);
-  let showFrameAnalysis = $derived(frameAnalysisData.length > 0);
+  let showFrameAnalysis = $derived(frameAnalysisSet !== null && frameAnalysisSet.frames.length > 0);
 
   function getEncoderSettings(): EncoderSettingsType {
     return {
@@ -96,8 +114,8 @@
       normalizeUnvoiced: encoderSettings.normalizeUnvoiced,
       normalizeVoiced: encoderSettings.normalizeVoiced,
       includeExplicitStopFrame: outputOptions.explicitStop,
-      minPitchHz: encoderSettings.minFrequency,
-      maxPitchHz: encoderSettings.maxFrequency,
+      minPitchHz: encoderSettings.minPitch,
+      maxPitchHz: encoderSettings.maxPitch,
       subMultipleThreshold: encoderSettings.submultipleThreshold,
       overridePitch: encoderSettings.overridePitch,
       pitchValue: encoderSettings.pitchValue,
@@ -107,10 +125,6 @@
       unvoicedMultiplier: encoderSettings.unvoicedMultiplier,
       highpassCutoff: encoderSettings.highpassCutoff,
       lowpassCutoff: encoderSettings.lowpassCutoff,
-      speed: encoderSettings.speed,
-      gain: encoderSettings.gain,
-      rawExcitation: encoderSettings.rawExcitation,
-      removeDC: encoderSettings.removeDC,
       peakNormalize: encoderSettings.peakNormalize,
       medianFilterWindow: encoderSettings.medianFilterWindow,
       noiseGateEnable: encoderSettings.noiseGateEnable,
@@ -131,6 +145,9 @@
       currentFile = file;
       fileName = file.name;
       statusMessage = 'Loading file...';
+
+      // Reset frame overrides when loading a new file
+      frameOverrides = new Map();
 
       const arrayBuffer = await file.arrayBuffer();
 
@@ -154,7 +171,6 @@
     }
   }
 
-
   async function encodeAudio() {
     if (!currentFile) return;
 
@@ -165,11 +181,16 @@
 
       // Create new encoder with current settings
       encoder = new LPCEncoder(getEncoderSettings());
-      const result = encoder.encodeWav(arrayBuffer);
+      const result = encoder.encodeWav(arrayBuffer, frameOverrides);
 
       encodedHex = result.hex;
       rawSamples = result.rawSamples;
-      frameAnalysisData = result.frameAnalysis;
+
+      // Wrap frame analysis with timestamp for reliable reactive tracking
+      frameAnalysisSet = {
+        frames: result.frameAnalysis,
+        timestamp: Date.now(),
+      };
 
       // Generate encoded audio by decoding the LPC data
       if (encodedHex) {
@@ -177,31 +198,49 @@
         if (hexData) {
           const stream = new TalkieStream();
           stream.say(hexData, outputOptions.tablesVariant);
-          encodedSamples = stream.generateAllSamples(false);
-          encodedFrameStarts = stream.getFrameSampleStarts();
+          const samples = stream.generateAllSamples(false);
+          const frameStarts = stream.getFrameSampleStarts();
+
+          // Wrap encoded data with timestamp for reliable reactive tracking
+          encodedData = {
+            samples,
+            frameStarts,
+            timestamp: Date.now(),
+          };
         }
       }
 
       // Count bytes
       const byteCount = encodedHex.split(',').length;
-      statusMessage = `Encoded successfully! ${byteCount} bytes`;
+      const overrideCount = frameOverrides.size;
+      statusMessage =
+        overrideCount > 0
+          ? `Encoded successfully! ${byteCount} bytes (${overrideCount} frame override${overrideCount > 1 ? 's' : ''} applied)`
+          : `Encoded successfully! ${byteCount} bytes`;
     } catch (error) {
       statusMessage = `Encoding error: ${String(error)}`;
       console.error(error);
     }
   }
 
-
   async function playRaw() {
     if (!rawSamples) return;
-    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'raw' ? getCurrentSample() : 0);
+    const offset = isPaused
+      ? playbackOffsetSamples
+      : playbackWhich === 'raw'
+        ? getCurrentSample()
+        : 0;
     await startPlayback(rawSamples, 8000, offset, 'raw');
   }
 
   async function playEncoded() {
-    if (!encodedSamples) return;
-    const offset = isPaused ? playbackOffsetSamples : (playbackWhich === 'encoded' ? getCurrentSample() : 0);
-    await startPlayback(encodedSamples, 8000, offset, 'encoded');
+    if (!encodedData) return;
+    const offset = isPaused
+      ? playbackOffsetSamples
+      : playbackWhich === 'encoded'
+        ? getCurrentSample()
+        : 0;
+    await startPlayback(encodedData.samples, 8000, offset, 'encoded');
   }
 
   function togglePlayRaw() {
@@ -228,25 +267,38 @@
   }
 
   function updatePlaybackHead() {
-    if (frameAnalysisData.length === 0) return;
+    if (!frameAnalysisSet || frameAnalysisSet.frames.length === 0) return;
     const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
     const current = getCurrentSample();
-    if (encodedFrameStarts && encodedFrameStarts.length > 0) {
+    const frameStarts = encodedData?.frameStarts;
+    if (frameStarts && frameStarts.length > 0) {
       // Find frame index by start positions (binary search)
-      let lo = 0, hi = encodedFrameStarts.length - 1, idx = 0;
+      let lo = 0,
+        hi = frameStarts.length - 1,
+        idx = 0;
       while (lo <= hi) {
         const mid = (lo + hi) >> 1;
-        if (encodedFrameStarts[mid] <= current) {
+        if (frameStarts[mid] <= current) {
           idx = mid;
           lo = mid + 1;
         } else {
           hi = mid - 1;
         }
       }
-      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, idx);
+      playbackFrameIndex = Math.min(frameAnalysisSet.frames.length - 1, idx);
     } else {
-      playbackFrameIndex = Math.min(frameAnalysisData.length - 1, Math.floor(current / samplesPerFrame));
+      playbackFrameIndex = Math.min(
+        frameAnalysisSet.frames.length - 1,
+        Math.floor(current / samplesPerFrame)
+      );
     }
+
+    // Update playhead overlays imperatively (not reactively!)
+    // This prevents 60fps reactive updates that cause UI lag
+    waveformCanvasRef?.updatePlayhead();
+    frameAnalysisSectionRef?.updateWaveformPlayhead();
+    frameAnalysisSectionRef?.updateTimelinePlayhead();
+
     if (currentSource && !isPaused) {
       playbackRaf = requestAnimationFrame(updatePlaybackHead);
     } else {
@@ -266,7 +318,9 @@
 
     // Ensure context is running
     if (audioContext.state === 'suspended') {
-      try { await audioContext.resume(); } catch {}
+      try {
+        await audioContext.resume();
+      } catch {}
     }
 
     // Create buffer
@@ -275,7 +329,9 @@
 
     // Stop any existing source
     if (currentSource) {
-      try { currentSource.stop(); } catch {}
+      try {
+        currentSource.stop();
+      } catch {}
       currentSource = null;
     }
 
@@ -309,7 +365,9 @@
 
   function stopAudio() {
     if (currentSource) {
-      try { currentSource.stop(); } catch {}
+      try {
+        currentSource.stop();
+      } catch {}
       currentSource = null;
     }
     isPaused = false;
@@ -324,13 +382,16 @@
       playbackOffsetSamples = getCurrentSample();
       isPaused = true;
       if (currentSource) {
-        try { currentSource.stop(); } catch {}
+        try {
+          currentSource.stop();
+        } catch {}
         currentSource = null;
       }
       // Keep playhead visible at paused frame
       const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
+      const numFrames = frameAnalysisSet?.frames.length ?? 0;
       playbackFrameIndex = Math.min(
-        Math.max(0, frameAnalysisData.length - 1),
+        Math.max(0, numFrames - 1),
         Math.floor(playbackOffsetSamples / Math.max(1, samplesPerFrame))
       );
     } else {
@@ -338,20 +399,25 @@
       isPaused = false;
       if (playbackWhich === 'raw' && rawSamples) {
         await startPlayback(rawSamples, 8000, playbackOffsetSamples, 'raw');
-      } else if (playbackWhich === 'encoded' && encodedSamples) {
-        await startPlayback(encodedSamples, 8000, playbackOffsetSamples, 'encoded');
+      } else if (playbackWhich === 'encoded' && encodedData) {
+        await startPlayback(encodedData.samples, 8000, playbackOffsetSamples, 'encoded');
       }
     }
   }
 
   function seekToFrame(frameDelta: number) {
-    if (!playbackWhich) return;
+    if (!playbackWhich || !frameAnalysisSet) return;
     const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
     const currentFrame = Math.max(0, playbackFrameIndex);
-    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, currentFrame + frameDelta));
-    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
-      ? encodedFrameStarts[newFrame]
-      : newFrame * samplesPerFrame;
+    const newFrame = Math.max(
+      0,
+      Math.min(frameAnalysisSet.frames.length - 1, currentFrame + frameDelta)
+    );
+    const frameStarts = encodedData?.frameStarts;
+    const offset =
+      frameStarts && newFrame < frameStarts.length
+        ? frameStarts[newFrame]
+        : newFrame * samplesPerFrame;
 
     // If paused: scrub without starting playback
     if (isPaused) {
@@ -363,24 +429,29 @@
     // If playing: jump and continue from there
     if (playbackWhich === 'raw' && rawSamples) {
       void startPlayback(rawSamples, 8000, offset, 'raw');
-    } else if (playbackWhich === 'encoded' && encodedSamples) {
-      void startPlayback(encodedSamples, 8000, offset, 'encoded');
+    } else if (playbackWhich === 'encoded' && encodedData) {
+      void startPlayback(encodedData.samples, 8000, offset, 'encoded');
     }
   }
 
   function jumpToFrame(frameIndex: number) {
+    if (!frameAnalysisSet) return;
     const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
-    const newFrame = Math.max(0, Math.min(frameAnalysisData.length - 1, frameIndex));
-    const offset = (encodedFrameStarts && newFrame < (encodedFrameStarts.length))
-      ? encodedFrameStarts[newFrame]
-      : newFrame * samplesPerFrame;
+    const newFrame = Math.max(0, Math.min(frameAnalysisSet.frames.length - 1, frameIndex));
+    const frameStarts = encodedData?.frameStarts;
+    const offset =
+      frameStarts && newFrame < frameStarts.length ? frameStarts[newFrame] : newFrame * samplesPerFrame;
     playbackOffsetSamples = offset;
     playbackFrameIndex = newFrame;
+
+    // Scroll to show the seeked frame (only on explicit user seek, not during playback)
+    frameAnalysisSectionRef?.scrollToPlayhead();
+
     if (currentSource && !isPaused) {
       if (playbackWhich === 'raw' && rawSamples) {
         void startPlayback(rawSamples, 8000, offset, 'raw');
-      } else if (playbackWhich === 'encoded' && encodedSamples) {
-        void startPlayback(encodedSamples, 8000, offset, 'encoded');
+      } else if (playbackWhich === 'encoded' && encodedData) {
+        void startPlayback(encodedData.samples, 8000, offset, 'encoded');
       }
     } else {
       isPaused = true;
@@ -415,21 +486,60 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     statusMessage = 'Hex data copied to clipboard!';
   }
 
+  function handleFrameOverride(
+    frameNumber: number,
+    classification: 'voiced' | 'unvoiced' | 'silent'
+  ) {
+    // Determine the original classification from the frame analysis
+    if (!frameAnalysisSet) return;
+    const frame = frameAnalysisSet.frames[frameNumber];
+    if (!frame) return;
+
+    const originalClassification: 'voiced' | 'unvoiced' | 'silent' = frame.isSilent
+      ? 'silent'
+      : frame.isVoiced
+        ? 'voiced'
+        : 'unvoiced';
+
+    // Create new Map to trigger reactivity (Svelte 5 tracks object identity)
+    frameOverrides = new Map(frameOverrides);
+    frameOverrides.set(frameNumber, {
+      originalClassification,
+      newClassification: classification,
+    });
+
+    statusMessage = `Applying override to frame ${frameNumber} (${originalClassification} → ${classification})...`;
+    // Trigger re-encoding with the new overrides
+    void encodeAudio();
+  }
+
+  function clearAllOverrides() {
+    const count = frameOverrides.size;
+    // Create new empty Map to trigger reactivity (Svelte 5 tracks object identity)
+    frameOverrides = new Map();
+    statusMessage = `Cleared ${count} override(s), re-encoding...`;
+    // Trigger re-encoding
+    void encodeAudio();
+  }
+
   // Dump decoded samples for inspection (logs summary and downloads CSV)
   function dumpDecodedSamples() {
-    if (!encodedSamples) return;
+    if (!encodedData) return;
+    const samples = encodedData.samples;
     const threshold = 1e-6;
     let leadingZeros = 0;
-    for (let i = 0; i < encodedSamples.length; i++) {
-      if (encodedSamples[i] === 0) leadingZeros++; else break;
+    for (let i = 0; i < samples.length; i++) {
+      if (samples[i] === 0) leadingZeros++;
+      else break;
     }
     let leadingNearZero = 0;
-    for (let i = 0; i < encodedSamples.length; i++) {
-      if (Math.abs(encodedSamples[i]) < threshold) leadingNearZero++; else break;
+    for (let i = 0; i < samples.length; i++) {
+      if (Math.abs(samples[i]) < threshold) leadingNearZero++;
+      else break;
     }
     let csv = 'index,value\n';
-    for (let i = 0; i < encodedSamples.length; i++) {
-      csv += `${i},${encodedSamples[i]}\n`;
+    for (let i = 0; i < samples.length; i++) {
+      csv += `${i},${samples[i]}\n`;
     }
     downloadFile('decoded_samples.csv', csv);
   }
@@ -443,6 +553,22 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
 
     if (canEncode) {
       void encodeAudio();
+    }
+  });
+
+  // Update playhead overlays after canvases are redrawn
+  // This effect runs AFTER the canvas drawing effects in child components
+  $effect(() => {
+    // Watch for timestamp changes (reliably detects re-encoding)
+    const encodedTimestamp = encodedData?.timestamp;
+    const framesTimestamp = frameAnalysisSet?.timestamp;
+    if (encodedTimestamp && framesTimestamp && playbackFrameIndex >= 0) {
+      // Defer to next tick to ensure canvas effects have completed
+      requestAnimationFrame(() => {
+        waveformCanvasRef?.updatePlayhead();
+        frameAnalysisSectionRef?.updateWaveformPlayhead();
+        frameAnalysisSectionRef?.updateTimelinePlayhead();
+      });
     }
   });
 </script>
@@ -468,22 +594,19 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     </div>
   </header>
 
-  <FileUploadSection
-    fileName={fileName}
-    statusMessage={statusMessage}
-    onFileSelect={handleFile}
-  />
+  <FileUploadSection {fileName} {statusMessage} onFileSelect={handleFile} />
 
   {#if showWaveforms && rawSamples}
     <WaveformCanvas
+      bind:this={waveformCanvasRef}
       samples={rawSamples}
       color="#00ff88"
       label="Raw Input Waveform"
       showPlaybackControls={true}
-      playbackFrameIndex={playbackFrameIndex}
-      frameAnalysisData={frameAnalysisData}
+      {playbackFrameIndex}
+      frameAnalysisData={frameAnalysisSet?.frames ?? []}
       isPlaying={playbackWhich === 'raw'}
-      isPaused={isPaused}
+      {isPaused}
       canSeek={!!playbackWhich}
       frameRate={encoderSettings.frameRate}
       onPlay={togglePlayRaw}
@@ -498,27 +621,31 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
 
   <OutputOptionsSection bind:options={outputOptions} />
 
-  {#if showFrameAnalysis}
+  {#if showFrameAnalysis && frameAnalysisSet}
     <FrameAnalysisSection
-      frameAnalysisData={frameAnalysisData}
-      encodedSamples={encodedSamples}
-      encodedFrameStarts={encodedFrameStarts}
-      playbackFrameIndex={playbackFrameIndex}
+      bind:this={frameAnalysisSectionRef}
+      frameAnalysisData={frameAnalysisSet.frames}
+      encodedSamples={encodedData?.samples ?? null}
+      encodedFrameStarts={encodedData?.frameStarts ?? null}
+      {playbackFrameIndex}
       frameRate={encoderSettings.frameRate}
-      playbackWhich={playbackWhich}
-      isPaused={isPaused}
+      {playbackWhich}
+      {isPaused}
+      {frameOverrides}
       onTogglePlayEncoded={togglePlayEncoded}
       onSeekFrame={seekToFrame}
       onStopAudio={stopAudio}
       onDumpSamples={dumpDecodedSamples}
       onSeekToFrame={jumpToFrame}
+      onFrameOverride={handleFrameOverride}
+      onClearAllOverrides={clearAllOverrides}
     />
   {/if}
 
   {#if showResults}
     <EncodedOutputSection
-      encodedHex={encodedHex}
-      statusMessage={statusMessage}
+      {encodedHex}
+      {statusMessage}
       onExportHeader={exportCHeader}
       onCopyHex={copyHexData}
     />

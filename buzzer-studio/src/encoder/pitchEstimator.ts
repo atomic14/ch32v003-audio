@@ -17,8 +17,9 @@ export interface PitchEstimatorConfig {
 }
 
 export interface PitchEstimatorResult {
-  period: number; // Pitch period in samples (0 if unvoiced)
+  period: number; // Pitch period in samples (always returns best guess, even if quality is low)
   quality: number; // Normalized autocorrelation coefficient at best period (0-1)
+  isReliable: boolean; // True if quality meets threshold (use this for voiced/unvoiced decision)
 }
 
 const DEFAULT_CONFIG: PitchEstimatorConfig = {
@@ -85,21 +86,15 @@ export function estimatePitch(
     }
   }
 
+  // Check if quality meets threshold for reliable pitch
+  const isReliable = bestQuality >= cfg.pitchQualityThreshold;
+
   // If NACF weak, optionally try YIN as fallback
-  if (bestQuality < cfg.pitchQualityThreshold && cfg.useYin) {
+  if (!isReliable && cfg.useYin) {
     const yinPeriod = yinEstimate(clipped, minPeriod, maxPeriod, cfg.yinThreshold ?? 0.1);
     if (yinPeriod > 0) {
-      return { period: yinPeriod, quality: bestQuality };
+      return { period: yinPeriod, quality: bestQuality, isReliable: false };
     }
-  }
-
-  // Criterion 3: Check if we have a valid peak (autocorrelation quality threshold)
-  if (bestQuality < cfg.pitchQualityThreshold) {
-    if (debug)
-      console.log(
-        `Peak too weak (${bestQuality.toFixed(3)} < ${cfg.pitchQualityThreshold}), returning 0`
-      );
-    return { period: 0, quality: bestQuality }; // Too weak, likely unvoiced
   }
 
   // Apply parabolic interpolation for sub-sample precision
@@ -107,12 +102,17 @@ export function estimatePitch(
 
   if (debug) {
     console.log('interpolatedPeriod:', interpolatedPeriod);
+    console.log(
+      'isReliable:',
+      isReliable,
+      `(quality ${bestQuality.toFixed(3)} vs threshold ${cfg.pitchQualityThreshold})`
+    );
   }
 
-  // Check for NaN
+  // Check for NaN - fall back to bestPeriod if interpolation fails
   if (!isFinite(interpolatedPeriod) || interpolatedPeriod <= 0) {
-    if (debug) console.log('interpolatedPeriod invalid, returning 0');
-    return { period: 0, quality: bestQuality };
+    if (debug) console.log('interpolatedPeriod invalid, using bestPeriod');
+    return { period: bestPeriod, quality: bestQuality, isReliable };
   }
 
   // Sub-multiple detection (octave error correction)
@@ -129,7 +129,9 @@ export function estimatePitch(
     console.log('finalPeriod after octave correction:', finalPeriod);
   }
 
-  return { period: finalPeriod, quality: bestQuality };
+  // Always return the best detected pitch, even if quality is low
+  // Let the caller decide whether to use it based on quality and isReliable flag
+  return { period: finalPeriod, quality: bestQuality, isReliable };
 }
 
 /**

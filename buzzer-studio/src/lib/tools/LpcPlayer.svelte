@@ -8,8 +8,6 @@
   import spkSpell from '../../lpc-phrases/spk-spell';
   import vocabUS from '../../lpc-phrases/vocab_US_TI99';
 
-  
-
   let audioContext = $state<AudioContext>();
   let currentSource = $state<AudioBufferSourceNode | null>(null);
   let hexInput = $state('');
@@ -84,7 +82,8 @@
   let debounceTimer: number | undefined;
   $effect(() => {
     // Track reactive dependencies
-    hexInput; deviceType;
+    hexInput;
+    deviceType;
 
     if (debounceTimer) {
       clearTimeout(debounceTimer);
@@ -101,8 +100,6 @@
       drawWaveform(currentWaveformData, normalizeWaveform);
     }
   });
-
-  
 
   function showStatus(message: string, type: 'info' | 'error' | 'success') {
     statusMessage = message;
@@ -176,7 +173,10 @@
         console.error('Waveform generation error:', error);
         clearCanvas();
         currentWaveformData = null;
-        showStatus('Error generating waveform. Try switching device type (TMS5220 ↔ TMS5100)', 'error');
+        showStatus(
+          'Error generating waveform. Try switching device type (TMS5220 ↔ TMS5100)',
+          'error'
+        );
         isGenerating = false;
       }
     }, 10);
@@ -447,9 +447,21 @@
           <div class="phrase-item">
             <span class="phrase-name">{name}</span>
             <div class="phrase-actions">
-              <button class="action-btn" title="Load" onclick={() => loadPhraseFromSet(selectedSetIndex, name as string)}>Load</button>
-              <button class="action-btn" title="Play" onclick={() => playPhraseFromSet(selectedSetIndex, name as string)}>▶</button>
-              <button class="action-btn" title="Copy hex" onclick={() => copyPhraseHexFromSet(selectedSetIndex, name as string)}>⧉</button>
+              <button
+                class="action-btn"
+                title="Load"
+                onclick={() => loadPhraseFromSet(selectedSetIndex, name as string)}>Load</button
+              >
+              <button
+                class="action-btn"
+                title="Play"
+                onclick={() => playPhraseFromSet(selectedSetIndex, name as string)}>▶</button
+              >
+              <button
+                class="action-btn"
+                title="Copy hex"
+                onclick={() => copyPhraseHexFromSet(selectedSetIndex, name as string)}>⧉</button
+              >
             </div>
           </div>
         {/each}
@@ -471,10 +483,12 @@
     <Button onclick={play} variant="primary" disabled={!hexInput.trim()}>
       {isPlaying ? '⏸ Pause' : '▶ Play'}
     </Button>
-    <Button onclick={stop} variant="secondary" disabled={!isPlaying}>
-      ■ Stop
-    </Button>
-    <Button onclick={downloadWav} variant="secondary" disabled={!currentWaveformData || !lastSampleRate}>
+    <Button onclick={stop} variant="secondary" disabled={!isPlaying}>■ Stop</Button>
+    <Button
+      onclick={downloadWav}
+      variant="secondary"
+      disabled={!currentWaveformData || !lastSampleRate}
+    >
       ⬇ WAV
     </Button>
     <select bind:value={deviceType} class="device-select">
@@ -514,8 +528,6 @@
 </div>
 
 <style>
-  
-
   .hex-input {
     width: 100%;
     padding: 0.75rem;

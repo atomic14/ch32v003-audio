@@ -357,7 +357,10 @@ extern const unsigned int ${arrayName}_len;
         <div class="waveform-item">
           <h4>Original (8kHz Mono)</h4>
           <canvas bind:this={originalCanvas} width="800" height="150"></canvas>
-          <Button onclick={() => processedAudioData && playAudio(processedAudioData)} variant="primary">
+          <Button
+            onclick={() => processedAudioData && playAudio(processedAudioData)}
+            variant="primary"
+          >
             ▶ Play
           </Button>
         </div>
@@ -382,10 +385,16 @@ extern const unsigned int ${arrayName}_len;
     <section class="export-section">
       <h3>4. Export C/C++ Files</h3>
       <div class="export-actions">
-        <Button onclick={() => downloadFile(`${fileName}_adpcm_2bit.h`, headerCode)} variant="primary">
+        <Button
+          onclick={() => downloadFile(`${fileName}_adpcm_2bit.h`, headerCode)}
+          variant="primary"
+        >
           Download .h File
         </Button>
-        <Button onclick={() => downloadFile(`${fileName}_adpcm_2bit.cpp`, cppCode)} variant="primary">
+        <Button
+          onclick={() => downloadFile(`${fileName}_adpcm_2bit.cpp`, cppCode)}
+          variant="primary"
+        >
           Download .cpp File
         </Button>
       </div>

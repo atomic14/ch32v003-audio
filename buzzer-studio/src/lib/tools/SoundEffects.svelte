@@ -107,7 +107,7 @@
         max={100}
         step={1}
         unit="%"
-        oninput={(val) => params.dutyCycle = val / 100}
+        oninput={(val) => (params.dutyCycle = val / 100)}
       />
 
       <RangeControl
@@ -117,7 +117,7 @@
         max={100}
         step={1}
         unit="%"
-        oninput={(val) => params.attack = val / 100}
+        oninput={(val) => (params.attack = val / 100)}
       />
 
       <RangeControl
@@ -127,7 +127,7 @@
         max={100}
         step={1}
         unit="%"
-        oninput={(val) => params.decay = val / 100}
+        oninput={(val) => (params.decay = val / 100)}
       />
 
       <RangeControl
@@ -137,7 +137,7 @@
         max={100}
         step={1}
         unit="%"
-        oninput={(val) => params.vibrato = val / 100}
+        oninput={(val) => (params.vibrato = val / 100)}
       />
 
       <RangeControl
@@ -155,21 +155,11 @@
           <legend>Waveform</legend>
           <div class="radio-group">
             <label class="radio-label">
-              <input
-                type="radio"
-                name="waveform"
-                value="square"
-                bind:group={params.waveform}
-              />
+              <input type="radio" name="waveform" value="square" bind:group={params.waveform} />
               <span>Square</span>
             </label>
             <label class="radio-label">
-              <input
-                type="radio"
-                name="waveform"
-                value="noise"
-                bind:group={params.waveform}
-              />
+              <input type="radio" name="waveform" value="noise" bind:group={params.waveform} />
               <span>Noise</span>
             </label>
           </div>
