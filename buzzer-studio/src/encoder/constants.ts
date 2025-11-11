@@ -116,8 +116,20 @@ export const MAX_PITCH_HZ = 500;
 export const SUB_MULTIPLE_THRESHOLD = 0.9;
 
 // =====================
-// Silence Trimming
+// Silence Detection
 // =====================
+
+/**
+ * RMS threshold for SILENCE frame encoding
+ * Frames with RMS below this will be encoded as energy=0 (SILENCE frame)
+ *
+ * This is the midpoint between RMS_TABLE[0]=0.0 and RMS_TABLE[1]=52.0
+ * Adjust based on recording quality:
+ * - Lower values (15-20): Preserve very quiet sounds, may encode noise
+ * - Default (26): Balanced - quiet consonants preserved, background noise filtered
+ * - Higher values (35-45): Aggressive silence detection, may lose quiet details
+ */
+export const SILENCE_RMS_THRESHOLD = 26.0;
 
 /**
  * Energy threshold for silence detection during trimming

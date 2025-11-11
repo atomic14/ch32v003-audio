@@ -97,6 +97,8 @@ export interface EncoderSettings {
   minEnergyThreshold: number; // Criterion 1: minimum energy for voiced
   energyRatioThreshold: number; // Criterion 2: original/emphasized energy ratio
   pitchQualityThreshold: number; // Criterion 3: minimum autocorrelation for valid pitch
+  // Silence detection
+  silenceThreshold: number; // RMS threshold for SILENCE frame (energy=0) encoding
 }
 
 /**
@@ -488,8 +490,8 @@ export class LPCEncoder {
       frames.push(frameData);
 
       // Capture frame analysis for visualization
-      // A frame will be encoded as SILENCE if RMS < 26.0 (midpoint between RMS_TABLE[0]=0.0 and RMS_TABLE[1]=52.0)
-      const isSilent = reflector.rms < 26.0;
+      // A frame will be encoded as SILENCE if RMS < silenceThreshold (default 26.0 = midpoint between RMS_TABLE[0]=0.0 and RMS_TABLE[1]=52.0)
+      const isSilent = reflector.rms < this.settings.silenceThreshold;
 
       // Check if frame has an override
       const override = frameOverrides.get(frameIndex);
@@ -546,17 +548,15 @@ export class LPCEncoder {
   /**
    * Normalize voiced RMS using peak normalization (BlueWizard RMSNormalizer.m lines 9-22)
    * Finds max RMS across all voiced frames and scales to rmsLimit
-   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) from normalization to preserve them
+   * IMPORTANT: Excludes SILENCE frames (RMS < silenceThreshold) from normalization to preserve them
    */
   private normalizeVoicedRMS(frames: FrameData[]): void {
-    const SILENCE_RMS_THRESHOLD = 26.0;
-
     // Find maximum RMS across all voiced frames (excluding SILENCE frames)
     let max = 0.0;
     for (const frame of frames) {
       if (
         !frame.reflector.isUnvoiced() &&
-        frame.reflector.rms >= SILENCE_RMS_THRESHOLD &&
+        frame.reflector.rms >= this.settings.silenceThreshold &&
         frame.reflector.rms > max
       ) {
         max = frame.reflector.rms;
@@ -571,7 +571,7 @@ export class LPCEncoder {
 
     // Scale all voiced frames (excluding SILENCE frames)
     for (const frame of frames) {
-      if (!frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
+      if (!frame.reflector.isUnvoiced() && frame.reflector.rms >= this.settings.silenceThreshold) {
         frame.reflector.rms = frame.reflector.rms * scale;
       }
     }
@@ -580,17 +580,15 @@ export class LPCEncoder {
   /**
    * Normalize unvoiced RMS using peak normalization (BlueWizard RMSNormalizer.m lines 24-37)
    * Finds max RMS across all unvoiced frames and scales to unvoicedRMSLimit
-   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) from normalization to preserve them
+   * IMPORTANT: Excludes SILENCE frames (RMS < silenceThreshold) from normalization to preserve them
    */
   private normalizeUnvoicedRMS(frames: FrameData[]): void {
-    const SILENCE_RMS_THRESHOLD = 26.0;
-
     // Find maximum RMS across all unvoiced frames (excluding SILENCE frames)
     let max = 0.0;
     for (const frame of frames) {
       if (
         frame.reflector.isUnvoiced() &&
-        frame.reflector.rms >= SILENCE_RMS_THRESHOLD &&
+        frame.reflector.rms >= this.settings.silenceThreshold &&
         frame.reflector.rms > max
       ) {
         max = frame.reflector.rms;
@@ -605,7 +603,7 @@ export class LPCEncoder {
 
     // Scale all unvoiced frames (excluding SILENCE frames)
     for (const frame of frames) {
-      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
+      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= this.settings.silenceThreshold) {
         frame.reflector.rms = frame.reflector.rms * scale;
       }
     }
@@ -614,13 +612,12 @@ export class LPCEncoder {
   /**
    * Apply unvoiced multiplier to all unvoiced frames (BlueWizard RMSNormalizer.m lines 39-44)
    * This is ALWAYS applied, regardless of normalization settings
-   * IMPORTANT: Excludes SILENCE frames (RMS < 26.0) to preserve them
+   * IMPORTANT: Excludes SILENCE frames (RMS < silenceThreshold) to preserve them
    */
   private applyUnvoicedMultiplier(frames: FrameData[]): void {
-    const SILENCE_RMS_THRESHOLD = 26.0;
     const multiplier = this.settings.unvoicedMultiplier;
     for (const frame of frames) {
-      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= SILENCE_RMS_THRESHOLD) {
+      if (frame.reflector.isUnvoiced() && frame.reflector.rms >= this.settings.silenceThreshold) {
         frame.reflector.rms *= multiplier;
       }
     }

@@ -684,8 +684,9 @@
         </p>
         <p>
           <strong>When they occur:</strong> When the RMS (Root Mean Square) energy of a frame is
-          below <strong>26.0</strong> in the chip's energy scale. This corresponds to normalized
-          audio amplitude below approximately <strong>0.0008</strong> (0.08% of full scale).
+          below the <strong>Silence Threshold</strong> (default 26.0) in the chip's energy scale.
+          This corresponds to normalized audio amplitude below approximately <strong>0.0008</strong>
+          (0.08% of full scale). You can adjust this threshold in the Encoder Settings.
         </p>
         <p>
           <strong>What happens:</strong> The chip smoothly ramps the energy down to zero over 25ms when

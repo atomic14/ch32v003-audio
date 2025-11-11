@@ -8,6 +8,7 @@
     voicedRmsLimit: number;
     normalizeUnvoiced: boolean;
     unvoicedRmsLimit: number;
+    silenceThreshold: number;
     // Input conditioning
     peakNormalize: boolean;
     medianFilterWindow: number;
@@ -164,6 +165,33 @@
           max="15"
           disabled={!settings.normalizeUnvoiced}
         />
+      </div>
+
+      <div class="setting-group">
+        <div class="setting-label">
+          <span>Silence Threshold</span>
+          <span
+            class="help-icon"
+            role="tooltip"
+            onmouseenter={(e) =>
+              showTooltip(
+                e,
+                'RMS threshold for encoding SILENCE frames (energy=0). Frames quieter than this become silent. Default 26 (midpoint between RMS values 0 and 52). Lower: preserves quiet sounds but may encode noise. Higher: aggressive silence detection but may lose quiet details.'
+              )}
+            onmouseleave={hideTooltip}>ⓘ</span
+          >
+        </div>
+        <div class="slider-wrapper">
+          <input
+            type="range"
+            bind:value={settings.silenceThreshold}
+            class="setting-slider"
+            min="10"
+            max="50"
+            step="1"
+          />
+          <span class="slider-value">{settings.silenceThreshold.toFixed(1)}</span>
+        </div>
       </div>
     </div>
 

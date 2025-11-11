@@ -51,6 +51,7 @@
     voicedRmsLimit: 14,
     normalizeUnvoiced: true,
     unvoicedRmsLimit: 14,
+    silenceThreshold: 26.0,
     // Input conditioning
     peakNormalize: false,
     medianFilterWindow: 0,
@@ -137,6 +138,7 @@
       minEnergyThreshold: encoderSettings.minEnergyThreshold,
       energyRatioThreshold: encoderSettings.energyRatioThreshold,
       pitchQualityThreshold: encoderSettings.pitchQualityThreshold,
+      silenceThreshold: encoderSettings.silenceThreshold,
     };
   }
 

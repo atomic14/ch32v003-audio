@@ -52,6 +52,7 @@ describe('LPCEncoder Integration', () => {
       minEnergyThreshold: 0.0001,
       energyRatioThreshold: 1.2,
       pitchQualityThreshold: 0.5,
+      silenceThreshold: 26.0,
       ...overrides,
     };
   }
