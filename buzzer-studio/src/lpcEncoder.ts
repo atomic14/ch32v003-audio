@@ -99,6 +99,8 @@ export interface EncoderSettings {
   pitchQualityThreshold: number; // Criterion 3: minimum autocorrelation for valid pitch
   // Silence detection
   silenceThreshold: number; // RMS threshold for SILENCE frame (energy=0) encoding
+  // Detection method
+  detectionMethod: 'energy-based' | 'k1-based'; // Choose between multi-criteria or simple K1-based
 }
 
 /**
@@ -445,17 +447,24 @@ export class LPCEncoder {
         this.settings.unvoicedThreshold
       );
 
-      // Store energy and pitch quality for full 3-criterion detection
-      reflector.originalEnergy = originalEnergy;
-      reflector.emphasizedEnergy = emphasizedEnergy;
-      reflector.pitchQuality = pitchQuality;
-      reflector.useEnergyBasedDetection = true;
-      reflector.skipEnergyRatioCheck = true; // Always skip energy ratio (criterion 2)
+      // Configure voiced/unvoiced detection method
+      if (this.settings.detectionMethod === 'energy-based') {
+        // Multi-criteria detection (default, recommended)
+        reflector.originalEnergy = originalEnergy;
+        reflector.emphasizedEnergy = emphasizedEnergy;
+        reflector.pitchQuality = pitchQuality;
+        reflector.useEnergyBasedDetection = true;
+        reflector.skipEnergyRatioCheck = true; // Always skip energy ratio (criterion 2)
 
-      // Apply detection threshold settings
-      reflector.minEnergyThreshold = this.settings.minEnergyThreshold;
-      reflector.energyRatioThreshold = this.settings.energyRatioThreshold;
-      reflector.pitchQualityThreshold = this.settings.pitchQualityThreshold;
+        // Apply detection threshold settings
+        reflector.minEnergyThreshold = this.settings.minEnergyThreshold;
+        reflector.energyRatioThreshold = this.settings.energyRatioThreshold;
+        reflector.pitchQualityThreshold = this.settings.pitchQualityThreshold;
+      } else {
+        // K1-based detection (BlueWizard original method)
+        reflector.useEnergyBasedDetection = false;
+        // unvoicedThreshold already set in Reflector constructor
+      }
 
       // NOTE: BlueWizard uses RMS directly from Leroux-Gueguen algorithm (Reflector.m)
       // Do NOT recalculate RMS here - the value from translateCoefficients is correct!

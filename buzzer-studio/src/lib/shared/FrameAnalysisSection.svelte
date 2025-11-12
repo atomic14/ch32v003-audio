@@ -597,7 +597,6 @@
   // Props change when parent creates new timestamped objects, triggering reliable redraws
   $effect(() => {
     if (frameAnalysisData.length > 0 && encodedSamples && frameTimeline) {
-      console.log("Redrawing frame timeline");
       drawFrameTimeline();
     }
   });

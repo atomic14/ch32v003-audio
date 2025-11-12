@@ -26,6 +26,7 @@
     minEnergyThreshold: number;
     energyRatioThreshold: number;
     pitchQualityThreshold: number;
+    detectionMethod: 'energy-based' | 'k1-based';
     frameRate: number;
     windowWidth: number;
     highpassCutoff: number;
@@ -433,6 +434,26 @@
         <div class="settings-grid settings-grid-3col">
           <div class="setting-group">
             <div class="setting-label">
+              <span>Detection Method</span>
+              <span
+                class="help-icon"
+                role="tooltip"
+                onmouseenter={(e) =>
+                  showTooltip(
+                    e,
+                    "Choose detection algorithm. Multi-Criteria (recommended): uses energy + pitch quality for better accuracy. K1-Based (original): BlueWizard's simple method using only K1 coefficient. Use K1 for exact BlueWizard compatibility."
+                  )}
+                onmouseleave={hideTooltip}>ⓘ</span
+              >
+            </div>
+            <select bind:value={settings.detectionMethod} class="setting-select">
+              <option value="energy-based">Multi-Criteria (Recommended)</option>
+              <option value="k1-based">K1-Based (BlueWizard Original)</option>
+            </select>
+          </div>
+
+          <div class="setting-group">
+            <div class="setting-label">
               <span>Min Energy Threshold</span>
               <span
                 class="help-icon"
@@ -440,7 +461,7 @@
                 onmouseenter={(e) =>
                   showTooltip(
                     e,
-                    'Criterion 1: Minimum RMS energy for frame to be considered voiced (vs silent). Very low values (~0.0001) work for most recordings.'
+                    'Criterion 1: Minimum RMS energy for frame to be considered voiced (vs silent). Very low values (~0.0001) work for most recordings. Only used in Multi-Criteria mode.'
                   )}
                 onmouseleave={hideTooltip}>ⓘ</span
               >
@@ -453,6 +474,7 @@
                 min="0.00001"
                 max="0.001"
                 step="0.00001"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
               <input
                 type="number"
@@ -461,6 +483,7 @@
                 min="0"
                 max="0.01"
                 step="0.00001"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
             </div>
           </div>
@@ -474,7 +497,7 @@
                 onmouseenter={(e) =>
                   showTooltip(
                     e,
-                    'Criterion 2: Ratio of original/pre-emphasized energy. Higher ratios indicate more high-frequency content (unvoiced). Typical: 1.5-1.8.'
+                    'Criterion 2: Ratio of original/pre-emphasized energy. Higher ratios indicate more high-frequency content (unvoiced). Typical: 1.5-1.8. Only used in Multi-Criteria mode (currently disabled).'
                   )}
                 onmouseleave={hideTooltip}>ⓘ</span
               >
@@ -487,6 +510,7 @@
                 min="1.0"
                 max="2.0"
                 step="0.1"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
               <input
                 type="number"
@@ -495,6 +519,7 @@
                 min="1.0"
                 max="3.0"
                 step="0.1"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
             </div>
           </div>
@@ -508,7 +533,7 @@
                 onmouseenter={(e) =>
                   showTooltip(
                     e,
-                    'Criterion 3: Minimum autocorrelation for reliable pitch detection. Higher values (0.5+) ensure only periodic (voiced) sounds are detected.'
+                    'Criterion 3: Minimum autocorrelation for reliable pitch detection. Higher values (0.5+) ensure only periodic (voiced) sounds are detected. Only used in Multi-Criteria mode.'
                   )}
                 onmouseleave={hideTooltip}>ⓘ</span
               >
@@ -521,6 +546,7 @@
                 min="0.1"
                 max="0.9"
                 step="0.05"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
               <input
                 type="number"
@@ -529,20 +555,21 @@
                 min="0"
                 max="1"
                 step="0.05"
+                disabled={settings.detectionMethod === 'k1-based'}
               />
             </div>
           </div>
 
           <div class="setting-group">
             <div class="setting-label">
-              <span>K1 Fallback Threshold</span>
+              <span>K1 Threshold</span>
               <span
                 class="help-icon"
                 role="tooltip"
                 onmouseenter={(e) =>
                   showTooltip(
                     e,
-                    'Legacy unvoiced threshold based on K1 reflection coefficient. Lower K1 values indicate unvoiced sounds. Typical: 0.5.'
+                    'K1 reflection coefficient threshold for voiced/unvoiced detection. If K1 >= threshold, frame is unvoiced. Used as main criterion in K1-Based mode, or as fallback in Multi-Criteria mode. Typical: 0.3 (BlueWizard default).'
                   )}
                 onmouseleave={hideTooltip}>ⓘ</span
               >
@@ -752,9 +779,36 @@
     width: 90px;
   }
 
+  .setting-select {
+    padding: 0.5rem;
+    background: #1a1a2e;
+    color: #fff;
+    border: 1px solid #444;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    transition: border-color 0.2s;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .setting-select:focus {
+    outline: none;
+    border-color: #6366f1;
+  }
+
+  .setting-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
   .setting-slider {
     flex: 1;
     cursor: pointer;
+  }
+
+  .setting-slider:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .slider-wrapper {

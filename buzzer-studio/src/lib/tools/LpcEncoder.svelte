@@ -69,6 +69,7 @@
     minEnergyThreshold: 0.0001,
     energyRatioThreshold: 1.2,
     pitchQualityThreshold: 0.5,
+    detectionMethod: 'energy-based' as 'energy-based' | 'k1-based',
     frameRate: 40,
     windowWidth: 2,
     highpassCutoff: 0,
@@ -139,6 +140,7 @@
       energyRatioThreshold: encoderSettings.energyRatioThreshold,
       pitchQualityThreshold: encoderSettings.pitchQualityThreshold,
       silenceThreshold: encoderSettings.silenceThreshold,
+      detectionMethod: encoderSettings.detectionMethod,
     };
   }
 
@@ -442,7 +444,9 @@
     const newFrame = Math.max(0, Math.min(frameAnalysisSet.frames.length - 1, frameIndex));
     const frameStarts = encodedData?.frameStarts;
     const offset =
-      frameStarts && newFrame < frameStarts.length ? frameStarts[newFrame] : newFrame * samplesPerFrame;
+      frameStarts && newFrame < frameStarts.length
+        ? frameStarts[newFrame]
+        : newFrame * samplesPerFrame;
     playbackOffsetSamples = offset;
     playbackFrameIndex = newFrame;
 
