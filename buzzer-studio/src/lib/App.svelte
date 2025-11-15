@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentPath } from './router.svelte';
+  import { currentPath, navigate } from './router.svelte';
   import SoundEffects from './tools/SoundEffects.svelte';
   import MidiConverter from './tools/MidiConverter.svelte';
   import AdpcmConverter from './tools/AdpcmConverter.svelte';
@@ -33,6 +33,11 @@
       label: 'Talkie (LPC) Player',
     },
   ];
+
+  function handleNavClick(event: MouseEvent, path: string) {
+    event.preventDefault();
+    navigate(path);
+  }
 </script>
 
 <div class="app-container">
@@ -44,10 +49,11 @@
   <nav class="tab-nav">
     {#each tabs as tab}
       <a
-        href="#{tab.path}"
+        href={tab.path}
         class="tab-button"
         class:active={currentPath.value === tab.path ||
           (currentPath.value === '/' && tab.path === '/midi-converter')}
+        onclick={(e) => handleNavClick(e, tab.path)}
       >
         <span class="tab-icon">{tab.icon}</span>
         <span class="tab-label">{tab.label}</span>
