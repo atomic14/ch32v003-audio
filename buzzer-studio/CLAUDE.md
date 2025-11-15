@@ -238,6 +238,41 @@ const app = mount(App, { target: document.querySelector('#app')! });
 - Prettier for automatic formatting
 - Run `npm run format` before committing
 
+## CloudFront Deployment
+
+The app uses client-side routing with `svelte-spa-router`. Each tool is accessible at its own path:
+- `/` or `/midi-converter` - MIDI Converter
+- `/sound-effects` - Sound Effect Generator
+- `/adpcm-converter` - ADPCM Converter
+- `/lpc-encoder` - LPC Encoder
+- `/lpc-player` - LPC Player
+
+### CloudFront Configuration
+
+For the SPA to work correctly on CloudFront, you need to configure error pages to redirect to `index.html`:
+
+**CloudFront Error Pages Settings:**
+1. Go to your CloudFront distribution → Error Pages
+2. Create a custom error response:
+   - **HTTP Error Code**: 403 (Forbidden)
+   - **Customize Error Response**: Yes
+   - **Response Page Path**: `/index.html`
+   - **HTTP Response Code**: 200 (OK)
+3. Create another custom error response:
+   - **HTTP Error Code**: 404 (Not Found)
+   - **Customize Error Response**: Yes
+   - **Response Page Path**: `/index.html`
+   - **HTTP Response Code**: 200 (OK)
+
+This ensures that when a user directly accesses a route like `/sound-effects`, CloudFront returns `index.html` (instead of a 404), and the client-side router handles the navigation.
+
+**Alternative S3 Static Website Hosting Configuration:**
+
+If using S3 static website hosting with CloudFront:
+1. In S3 bucket properties → Static website hosting
+2. Set **Index document**: `index.html`
+3. Set **Error document**: `index.html`
+
 ## Important Notes
 
 ### LPC Encoder Algorithm

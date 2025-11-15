@@ -103,6 +103,9 @@ body {
 }
 
 .tab-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.75rem 1.5rem;
   background: var(--bg-light);
   border: 2px solid var(--border);
@@ -115,6 +118,7 @@ body {
   font-family: inherit;
   border-bottom: 3px solid transparent;
   margin-bottom: -1rem;
+  text-decoration: none;
 }
 
 .tab-button:hover {

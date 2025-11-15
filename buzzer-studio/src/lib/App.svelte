@@ -1,40 +1,37 @@
 <script lang="ts">
+  import { currentPath } from './router.svelte';
   import SoundEffects from './tools/SoundEffects.svelte';
   import MidiConverter from './tools/MidiConverter.svelte';
   import AdpcmConverter from './tools/AdpcmConverter.svelte';
   import LpcEncoder from './tools/LpcEncoder.svelte';
   import LpcPlayer from './tools/LpcPlayer.svelte';
 
-  type TabId =
-    | 'midi-converter'
-    | 'sound-effects'
-    | 'adpcm-converter'
-    | 'lpc-encoder'
-    | 'lpc-player';
-
-  let activeTab = $state<TabId>('midi-converter');
-
   const tabs = [
     {
-      id: 'midi-converter' as TabId,
+      path: '/midi-converter',
       icon: '🎵',
       label: 'MIDI Converter',
-      component: MidiConverter,
     },
-    { id: 'sound-effects' as TabId, icon: '🔊', label: 'Sound Effects', component: SoundEffects },
     {
-      id: 'adpcm-converter' as TabId,
+      path: '/sound-effects',
+      icon: '🔊',
+      label: 'Sound Effects',
+    },
+    {
+      path: '/adpcm-converter',
       icon: '📦',
       label: 'ADPCM Converter',
-      component: AdpcmConverter,
     },
     {
-      id: 'lpc-encoder' as TabId,
+      path: '/lpc-encoder',
       icon: '🎙️',
       label: 'Talkie (LPC) Encoder',
-      component: LpcEncoder,
     },
-    { id: 'lpc-player' as TabId, icon: '🤖', label: 'Talkie (LPC) Player', component: LpcPlayer },
+    {
+      path: '/lpc-player',
+      icon: '🤖',
+      label: 'Talkie (LPC) Player',
+    },
   ];
 </script>
 
@@ -46,35 +43,32 @@
 
   <nav class="tab-nav">
     {#each tabs as tab}
-      <button
+      <a
+        href="#{tab.path}"
         class="tab-button"
-        class:active={activeTab === tab.id}
-        onclick={() => (activeTab = tab.id)}
+        class:active={currentPath.value === tab.path ||
+          (currentPath.value === '/' && tab.path === '/midi-converter')}
       >
         <span class="tab-icon">{tab.icon}</span>
         <span class="tab-label">{tab.label}</span>
-      </button>
+      </a>
     {/each}
   </nav>
 
   <main class="tab-content">
-    {#each tabs as tab}
-      {#if activeTab === tab.id}
-        <div class="tab-pane active">
-          {#if tab.component === MidiConverter}
-            <MidiConverter />
-          {:else if tab.component === SoundEffects}
-            <SoundEffects />
-          {:else if tab.component === AdpcmConverter}
-            <AdpcmConverter />
-          {:else if tab.component === LpcEncoder}
-            <LpcEncoder />
-          {:else if tab.component === LpcPlayer}
-            <LpcPlayer />
-          {/if}
-        </div>
+    <div class="tab-pane active">
+      {#if currentPath.value === '/sound-effects'}
+        <SoundEffects />
+      {:else if currentPath.value === '/adpcm-converter'}
+        <AdpcmConverter />
+      {:else if currentPath.value === '/lpc-encoder'}
+        <LpcEncoder />
+      {:else if currentPath.value === '/lpc-player'}
+        <LpcPlayer />
+      {:else}
+        <MidiConverter />
       {/if}
-    {/each}
+    </div>
   </main>
 
   <footer class="app-footer">
