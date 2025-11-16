@@ -6,6 +6,13 @@
   import LpcEncoder from './tools/LpcEncoder.svelte';
   import LpcPlayer from './tools/LpcPlayer.svelte';
 
+  // Declare gtag function for Google Analytics
+  declare global {
+    interface Window {
+      gtag?: (command: string, ...args: unknown[]) => void;
+    }
+  }
+
   const tabs = [
     {
       path: '/midi-converter',
@@ -38,6 +45,20 @@
     event.preventDefault();
     navigate(path);
   }
+
+  // Track route changes with Google Analytics
+  $effect(() => {
+    const path = currentPath.value;
+
+    // Send pageview to Google Analytics
+    if (typeof window !== 'undefined' && window.gtag) {
+      window.gtag('event', 'page_view', {
+        page_path: path,
+        page_title: document.title,
+        page_location: window.location.href,
+      });
+    }
+  });
 </script>
 
 <div class="app-container">
