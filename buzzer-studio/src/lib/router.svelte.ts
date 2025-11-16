@@ -8,6 +8,7 @@ function getCurrentPath(): string {
   return window.location.pathname;
 }
 
+// eslint-disable-next-line no-undef
 export const currentPath = $state({ value: getCurrentPath() });
 
 // Listen to both hash changes and popstate (browser back/forward)
