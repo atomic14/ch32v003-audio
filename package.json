@@ -1,0 +1,12 @@
+{
+  "name": "brain-transplant",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Brain Transplant - Audio tools for embedded systems",
+  "scripts": {
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

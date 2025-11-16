@@ -608,9 +608,9 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
           <h3>Linear Predictive Coding (LPC) Speech Synthesis</h3>
           <p>
             LPC is a classic speech compression algorithm used in vintage speech synthesis chips
-            like the Texas Instruments TMS5220 (found in Speak & Spell, arcade games, and many
-            1980s toys). Instead of storing the actual audio waveform, LPC stores a mathematical
-            model of the human vocal tract.
+            like the Texas Instruments TMS5220 (found in Speak & Spell, arcade games, and many 1980s
+            toys). Instead of storing the actual audio waveform, LPC stores a mathematical model of
+            the human vocal tract.
           </p>
         </div>
 
@@ -622,12 +622,12 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
           </p>
           <ul class="explanation-list">
             <li>
-              <strong>Reflection Coefficients (K1-K10):</strong> Model the shape of your vocal
-              tract (tongue position, mouth opening, etc.)
+              <strong>Reflection Coefficients (K1-K10):</strong> Model the shape of your vocal tract
+              (tongue position, mouth opening, etc.)
             </li>
             <li>
-              <strong>Pitch:</strong> The fundamental frequency of your voice (high for vowels like
-              "ee", varies for "ah", zero for consonants like "s")
+              <strong>Pitch:</strong> The fundamental frequency of your voice (high for vowels like "ee",
+              varies for "ah", zero for consonants like "s")
             </li>
             <li>
               <strong>Energy:</strong> How loud the sound is
@@ -644,7 +644,9 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
           <p>This encoder implements the complete TMS5220 encoding algorithm:</p>
           <ol class="explanation-pipeline">
             <li>Parse WAV file and extract audio samples</li>
-            <li>Pre-process: normalize volume, reduce sample rate to 8kHz, apply pre-emphasis filter</li>
+            <li>
+              Pre-process: normalize volume, reduce sample rate to 8kHz, apply pre-emphasis filter
+            </li>
             <li>Split audio into overlapping 25ms frames with windowing</li>
             <li>Calculate autocorrelation coefficients for each frame</li>
             <li>Use Levinson-Durbin algorithm to extract reflection coefficients</li>
@@ -662,8 +664,8 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
           <h4>Why Use LPC?</h4>
           <ul class="explanation-list">
             <li>
-              <strong>Extreme Compression:</strong> 8kHz speech compresses from ~64kbps to ~1.2kbps
-              (50:1 ratio!)
+              <strong>Extreme Compression:</strong> 8kHz speech compresses from ~64kbps to ~1.2kbps (50:1
+              ratio!)
             </li>
             <li>
               <strong>Retro Sound:</strong> That classic robotic "Speak & Spell" voice quality
@@ -672,8 +674,7 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
               <strong>Low Memory:</strong> Perfect for microcontrollers with limited storage
             </li>
             <li>
-              <strong>Hardware Compatible:</strong> Works with vintage TMS5220 chips or software
-              emulation
+              <strong>Hardware Compatible:</strong> Works with vintage TMS5220 chips or software emulation
             </li>
           </ul>
         </div>

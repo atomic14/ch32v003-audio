@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
-    "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build"
+    "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build",
+    "prepare": "husky"
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28"
@@ -28,11 +29,18 @@
     "@typescript-eslint/parser": "^8.18.2",
     "@vitest/ui": "^4.0.6",
     "eslint": "^9.18.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.6",
     "prettier": "^3.4.2",
     "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^5.43.2",
     "typescript": "~5.9.3",
     "vite": "^7.1.7",
     "vitest": "^4.0.6"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,svelte,css}": "prettier --check",
+    "*.{ts,tsx}": "eslint --max-warnings 0",
+    "*.{ts,tsx,svelte}": "bash -c 'npm run type-check'"
   }
 }
