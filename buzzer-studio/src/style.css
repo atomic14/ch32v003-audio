@@ -2039,9 +2039,129 @@ button:active {
 }
 
 .explanation-content {
-  padding: 1.5rem;
+  padding: 1.25rem;
   border-top: 1px solid var(--border);
   animation: fadeIn 0.3s ease;
+  text-align: left;
+}
+
+.explanation-content h3,
+.explanation-content h4 {
+  text-align: left;
+}
+
+.explanation-content ul,
+.explanation-content ol {
+  text-align: left;
+}
+
+.explanation-content p {
+  text-align: left;
+}
+
+.explanation-section {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(71, 85, 105, 0.3);
+}
+
+.explanation-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0;
+}
+
+.explanation-section h3 {
+  color: var(--primary);
+  font-size: 1.3rem;
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+}
+
+.explanation-section h4 {
+  color: var(--text);
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.explanation-section p {
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.explanation-section p:last-child {
+  margin-bottom: 0;
+}
+
+.explanation-list {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5rem 0 0.75rem 0;
+}
+
+.explanation-list li {
+  padding: 0.35rem 0 0.35rem 1.5rem;
+  position: relative;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.explanation-list li::before {
+  content: '▸';
+  position: absolute;
+  left: 0;
+  color: var(--primary);
+  font-weight: bold;
+}
+
+.explanation-pipeline {
+  list-style: none;
+  counter-reset: pipeline-counter;
+  padding-left: 0;
+  margin: 0.5rem 0 0.75rem 0;
+}
+
+.explanation-pipeline li {
+  counter-increment: pipeline-counter;
+  padding: 0.4rem 0 0.4rem 2.5rem;
+  position: relative;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.explanation-pipeline li::before {
+  content: counter(pipeline-counter);
+  position: absolute;
+  left: 0;
+  top: 0.6rem;
+  background: var(--primary);
+  color: white;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.explanation-tips {
+  background: rgba(99, 102, 241, 0.1);
+  border-left: 3px solid var(--primary);
+  padding: 0.85rem 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.explanation-tips strong {
+  color: var(--primary);
+  display: inline;
+  margin-right: 0.25rem;
 }
 
 .explanation-row {
