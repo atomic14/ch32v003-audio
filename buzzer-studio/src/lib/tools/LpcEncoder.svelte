@@ -10,6 +10,7 @@
   import VoicedUnvoicedExplanation from '../shared/VoicedUnvoicedExplanation.svelte';
   import ExperimentalBanner from '../shared/ExperimentalBanner.svelte';
   import LpcExplanationBox from '../shared/LpcExplanationBox.svelte';
+  import VideoDemo from '../shared/VideoDemo.svelte';
   import { LPCEncoder } from '../../lpcEncoder';
   import type { EncoderSettings as EncoderSettingsType, FrameAnalysis } from '../../lpcEncoder';
   import { TalkieStream, parseHexString } from '../../talkieStream';
@@ -554,6 +555,8 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     <ExperimentalBanner />
 
     <LpcExplanationBox />
+
+    <VideoDemo videoId="RZvX95aXSdM" />
   </header>
 
   <FileUploadSection {fileName} {statusMessage} onFileSelect={handleFile} />
