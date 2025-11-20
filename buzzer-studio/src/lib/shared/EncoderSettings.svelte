@@ -860,9 +860,7 @@
   }
 
   .advanced-settings {
-    margin-top: 1.5rem;
     border-top: 1px solid #444;
-    padding-top: 1rem;
   }
 
   .advanced-settings-summary {
@@ -879,7 +877,6 @@
   }
 
   .advanced-settings-content {
-    margin-top: 1.5rem;
   }
 
   .advanced-settings-content h4 {
