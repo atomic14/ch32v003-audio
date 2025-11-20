@@ -5,7 +5,11 @@
   import FileUploadSection from '../shared/FileUploadSection.svelte';
   import OutputOptionsSection from '../shared/OutputOptionsSection.svelte';
   import EncodedOutputSection from '../shared/EncodedOutputSection.svelte';
-  import FrameAnalysisSection from '../shared/FrameAnalysisSection.svelte';
+  import FrameTimelineSection from '../shared/FrameTimelineSection.svelte';
+  import SelectedFramePanel from '../shared/SelectedFramePanel.svelte';
+  import VoicedUnvoicedExplanation from '../shared/VoicedUnvoicedExplanation.svelte';
+  import ExperimentalBanner from '../shared/ExperimentalBanner.svelte';
+  import LpcExplanationBox from '../shared/LpcExplanationBox.svelte';
   import { LPCEncoder } from '../../lpcEncoder';
   import type { EncoderSettings as EncoderSettingsType, FrameAnalysis } from '../../lpcEncoder';
   import { TalkieStream, parseHexString } from '../../talkieStream';
@@ -97,7 +101,11 @@
 
   // Component references for imperative playhead updates
   let waveformCanvasRef = $state<WaveformCanvas | null>(null);
-  let frameAnalysisSectionRef = $state<FrameAnalysisSection | null>(null);
+  let encodedWaveformRef = $state<WaveformCanvas | null>(null);
+  let frameTimelineRef = $state<FrameTimelineSection | null>(null);
+
+  // Selected frame state (moved from FrameAnalysisSection)
+  let selectedFrameIndex = $state<number | null>(null);
 
   // Computed
   let showResults = $derived(encodedHex !== '');
@@ -300,8 +308,8 @@
     // Update playhead overlays imperatively (not reactively!)
     // This prevents 60fps reactive updates that cause UI lag
     waveformCanvasRef?.updatePlayhead();
-    frameAnalysisSectionRef?.updateWaveformPlayhead();
-    frameAnalysisSectionRef?.updateTimelinePlayhead();
+    encodedWaveformRef?.updatePlayhead();
+    frameTimelineRef?.updatePlayhead();
 
     if (currentSource && !isPaused) {
       playbackRaf = requestAnimationFrame(updatePlaybackHead);
@@ -409,35 +417,6 @@
     }
   }
 
-  function seekToFrame(frameDelta: number) {
-    if (!playbackWhich || !frameAnalysisSet) return;
-    const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
-    const currentFrame = Math.max(0, playbackFrameIndex);
-    const newFrame = Math.max(
-      0,
-      Math.min(frameAnalysisSet.frames.length - 1, currentFrame + frameDelta)
-    );
-    const frameStarts = encodedData?.frameStarts;
-    const offset =
-      frameStarts && newFrame < frameStarts.length
-        ? frameStarts[newFrame]
-        : newFrame * samplesPerFrame;
-
-    // If paused: scrub without starting playback
-    if (isPaused) {
-      playbackOffsetSamples = offset;
-      playbackFrameIndex = newFrame;
-      return;
-    }
-
-    // If playing: jump and continue from there
-    if (playbackWhich === 'raw' && rawSamples) {
-      void startPlayback(rawSamples, 8000, offset, 'raw');
-    } else if (playbackWhich === 'encoded' && encodedData) {
-      void startPlayback(encodedData.samples, 8000, offset, 'encoded');
-    }
-  }
-
   function jumpToFrame(frameIndex: number) {
     if (!frameAnalysisSet) return;
     const samplesPerFrame = Math.floor(playbackSampleRate / encoderSettings.frameRate);
@@ -451,7 +430,8 @@
     playbackFrameIndex = newFrame;
 
     // Scroll to show the seeked frame (only on explicit user seek, not during playback)
-    frameAnalysisSectionRef?.scrollToPlayhead();
+    encodedWaveformRef?.scrollToPlayhead();
+    frameTimelineRef?.scrollToFrame(newFrame);
 
     if (currentSource && !isPaused) {
       if (playbackWhich === 'raw' && rawSamples) {
@@ -528,28 +508,6 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
     void encodeAudio();
   }
 
-  // Dump decoded samples for inspection (logs summary and downloads CSV)
-  function dumpDecodedSamples() {
-    if (!encodedData) return;
-    const samples = encodedData.samples;
-    const threshold = 1e-6;
-    let leadingZeros = 0;
-    for (let i = 0; i < samples.length; i++) {
-      if (samples[i] === 0) leadingZeros++;
-      else break;
-    }
-    let leadingNearZero = 0;
-    for (let i = 0; i < samples.length; i++) {
-      if (Math.abs(samples[i]) < threshold) leadingNearZero++;
-      else break;
-    }
-    let csv = 'index,value\n';
-    for (let i = 0; i < samples.length; i++) {
-      csv += `${i},${samples[i]}\n`;
-    }
-    downloadFile('decoded_samples.csv', csv);
-  }
-
   // Auto-encode when settings change
   $effect(() => {
     // Track changes by accessing all properties within the settings objects
@@ -572,120 +530,30 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
       // Defer to next tick to ensure canvas effects have completed
       requestAnimationFrame(() => {
         waveformCanvasRef?.updatePlayhead();
-        frameAnalysisSectionRef?.updateWaveformPlayhead();
-        frameAnalysisSectionRef?.updateTimelinePlayhead();
+        encodedWaveformRef?.updatePlayhead();
+        frameTimelineRef?.updatePlayhead();
       });
     }
   });
+
+  // Handle frame selection from timeline
+  function handleFrameSelect(frameIndex: number) {
+    selectedFrameIndex = frameIndex;
+  }
+
+  function handleFrameClose() {
+    selectedFrameIndex = null;
+  }
 </script>
 
 <div class="tool-content">
   <header class="tool-header">
-    <h2>🎙️ Talkie (LPC) Encoder</h2>
+    <h2>Talkie (LPC) Encoder</h2>
     <p class="subtitle">Encode WAV files to LPC speech synthesis</p>
 
-    <div class="experimental-banner">
-      <div class="experimental-icon">⚠️</div>
-      <div class="experimental-content">
-        <strong>Experimental Feature - Work in Progress</strong>
-        <p>
-          This LPC encoder is under active development. Results may vary, and features are subject
-          to change. We welcome your feedback and bug reports!
-        </p>
-        <p>
-          Much of this code is based on the BlueWizard LPC encoder app along with feedback from many
-          helpful people.
-        </p>
-      </div>
-    </div>
+    <ExperimentalBanner />
 
-    <details class="explanation-box">
-      <summary class="explanation-summary">
-        ℹ️ What is LPC Encoding? (Click to learn more)
-      </summary>
-      <div class="explanation-content">
-        <div class="explanation-section">
-          <h3>Linear Predictive Coding (LPC) Speech Synthesis</h3>
-          <p>
-            LPC is a classic speech compression algorithm used in vintage speech synthesis chips
-            like the Texas Instruments TMS5220 (found in Speak & Spell, arcade games, and many 1980s
-            toys). Instead of storing the actual audio waveform, LPC stores a mathematical model of
-            the human vocal tract.
-          </p>
-        </div>
-
-        <div class="explanation-section">
-          <h4>How It Works</h4>
-          <p>
-            The algorithm analyzes speech in small chunks (frames) and extracts a few key parameters
-            that describe how your vocal tract is shaped when producing each sound:
-          </p>
-          <ul class="explanation-list">
-            <li>
-              <strong>Reflection Coefficients (K1-K10):</strong> Model the shape of your vocal tract
-              (tongue position, mouth opening, etc.)
-            </li>
-            <li>
-              <strong>Pitch:</strong> The fundamental frequency of your voice (high for vowels like "ee",
-              varies for "ah", zero for consonants like "s")
-            </li>
-            <li>
-              <strong>Energy:</strong> How loud the sound is
-            </li>
-            <li>
-              <strong>Voiced/Unvoiced:</strong> Whether the sound uses vocal cord vibration (vowels,
-              "m", "n") or is just noise ("s", "f", "sh")
-            </li>
-          </ul>
-        </div>
-
-        <div class="explanation-section">
-          <h4>The Encoding Pipeline (12 Stages)</h4>
-          <p>This encoder implements the complete TMS5220 encoding algorithm:</p>
-          <ol class="explanation-pipeline">
-            <li>Parse WAV file and extract audio samples</li>
-            <li>
-              Pre-process: normalize volume, reduce sample rate to 8kHz, apply pre-emphasis filter
-            </li>
-            <li>Split audio into overlapping 25ms frames with windowing</li>
-            <li>Calculate autocorrelation coefficients for each frame</li>
-            <li>Use Levinson-Durbin algorithm to extract reflection coefficients</li>
-            <li>Detect pitch and classify frames as voiced/unvoiced/silent</li>
-            <li>Calculate RMS energy for each frame</li>
-            <li>Quantize all parameters to match TMS5220 lookup tables</li>
-            <li>Detect and mark repeated frames for compression</li>
-            <li>Pack parameters into binary bit patterns</li>
-            <li>Convert to hexadecimal format</li>
-            <li>Generate C/C++/Python code for playback on microcontrollers</li>
-          </ol>
-        </div>
-
-        <div class="explanation-section">
-          <h4>Why Use LPC?</h4>
-          <ul class="explanation-list">
-            <li>
-              <strong>Extreme Compression:</strong> 8kHz speech compresses from ~64kbps to ~1.2kbps (50:1
-              ratio!)
-            </li>
-            <li>
-              <strong>Retro Sound:</strong> That classic robotic "Speak & Spell" voice quality
-            </li>
-            <li>
-              <strong>Low Memory:</strong> Perfect for microcontrollers with limited storage
-            </li>
-            <li>
-              <strong>Hardware Compatible:</strong> Works with vintage TMS5220 chips or software emulation
-            </li>
-          </ul>
-        </div>
-
-        <div class="explanation-tips">
-          <strong>💡 Tips for best results:</strong> Use clear speech, avoid background noise, speak
-          at a moderate pace, and try adjusting the voiced/unvoiced detection settings if the output
-          sounds too robotic or too noisy.
-        </div>
-      </div>
-    </details>
+    <LpcExplanationBox />
   </header>
 
   <FileUploadSection {fileName} {statusMessage} onFileSelect={handleFile} />
@@ -699,44 +567,70 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
         label="Raw Input Waveform"
         showPlaybackControls={true}
         {playbackFrameIndex}
-        frameAnalysisData={frameAnalysisSet?.frames ?? []}
+        frames={frameAnalysisSet?.frames ?? []}
         isPlaying={playbackWhich === 'raw'}
         {isPaused}
-        canSeek={!!playbackWhich}
+        seekEnabled={!!playbackWhich}
         frameRate={encoderSettings.frameRate}
         onPlay={togglePlayRaw}
         onPause={togglePlayRaw}
         onStop={stopAudio}
-        onSeekFrame={seekToFrame}
         onSeek={jumpToFrame}
       />
     </div>
   {/if}
 
+  {#if showFrameAnalysis && frameAnalysisSet && encodedData}
+    <div style="margin-bottom: 1.5rem;">
+      <WaveformCanvas
+        bind:this={encodedWaveformRef}
+        samples={encodedData.samples}
+        color="#ff6b6b"
+        label="LPC Encoded/Decoded Waveform"
+        showPlaybackControls={true}
+        {playbackFrameIndex}
+        frames={frameAnalysisSet.frames}
+        encodedFrameStarts={encodedData.frameStarts}
+        isPlaying={playbackWhich === 'encoded'}
+        {isPaused}
+        seekEnabled={!!playbackWhich}
+        frameRate={encoderSettings.frameRate}
+        onPlay={togglePlayEncoded}
+        onPause={togglePlayEncoded}
+        onStop={stopAudio}
+        onSeek={jumpToFrame}
+      />
+    </div>
+
+    <FrameTimelineSection
+      bind:this={frameTimelineRef}
+      frames={frameAnalysisSet.frames}
+      encodedSamples={encodedData.samples}
+      frameRate={encoderSettings.frameRate}
+      {playbackFrameIndex}
+      {isPaused}
+      {frameOverrides}
+      onSeek={jumpToFrame}
+      onSelectFrame={handleFrameSelect}
+      onClearAllOverrides={clearAllOverrides}
+    />
+
+    {#if selectedFrameIndex !== null}
+      <SelectedFramePanel
+        {selectedFrameIndex}
+        frames={frameAnalysisSet.frames}
+        {frameOverrides}
+        onFrameOverride={handleFrameOverride}
+        onClose={handleFrameClose}
+      />
+    {/if}
+
+    <VoicedUnvoicedExplanation />
+  {/if}
+
   <EncoderSettings bind:settings={encoderSettings} />
 
   <OutputOptionsSection bind:options={outputOptions} />
-
-  {#if showFrameAnalysis && frameAnalysisSet}
-    <FrameAnalysisSection
-      bind:this={frameAnalysisSectionRef}
-      frameAnalysisData={frameAnalysisSet.frames}
-      encodedSamples={encodedData?.samples ?? null}
-      encodedFrameStarts={encodedData?.frameStarts ?? null}
-      {playbackFrameIndex}
-      frameRate={encoderSettings.frameRate}
-      {playbackWhich}
-      {isPaused}
-      {frameOverrides}
-      onTogglePlayEncoded={togglePlayEncoded}
-      onSeekFrame={seekToFrame}
-      onStopAudio={stopAudio}
-      onDumpSamples={dumpDecodedSamples}
-      onSeekToFrame={jumpToFrame}
-      onFrameOverride={handleFrameOverride}
-      onClearAllOverrides={clearAllOverrides}
-    />
-  {/if}
 
   {#if showResults}
     <EncodedOutputSection
@@ -762,33 +656,6 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
 </div>
 
 <style>
-  .experimental-banner {
-    display: flex;
-    gap: 1rem;
-    padding: 1rem;
-    background: rgba(255, 165, 0, 0.1);
-    border: 1px solid rgba(255, 165, 0, 0.3);
-    border-radius: 4px;
-    margin: 1rem 0;
-  }
-
-  .experimental-icon {
-    font-size: 1.5rem;
-  }
-
-  .experimental-content {
-    flex: 1;
-  }
-
-  .experimental-content strong {
-    color: #ffa500;
-  }
-
-  .experimental-content p {
-    margin: 0.5rem 0 0 0;
-    font-size: 0.9rem;
-  }
-
   .attribution-text {
     font-size: 0.9rem;
     color: #888;

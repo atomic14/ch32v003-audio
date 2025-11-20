@@ -8,16 +8,15 @@
     showHeader?: boolean;
     showPlaybackControls?: boolean;
     playbackFrameIndex?: number;
-    frameAnalysisData?: FrameAnalysis[];
+    frames?: FrameAnalysis[];
     encodedFrameStarts?: number[] | null;
     isPlaying?: boolean;
     isPaused?: boolean;
-    canSeek?: boolean;
+    seekEnabled?: boolean;
     frameRate?: number;
     onPlay?: () => void;
     onPause?: () => void;
     onStop?: () => void;
-    onSeekFrame?: (delta: number) => void;
     onSeek?: (frameIndex: number) => void;
   }
 
@@ -28,16 +27,15 @@
     showHeader = true,
     showPlaybackControls = false,
     playbackFrameIndex = -1,
-    frameAnalysisData = [],
+    frames = [],
     encodedFrameStarts = null,
     isPlaying = false,
     isPaused = false,
-    canSeek = false,
+    seekEnabled = false,
     frameRate = 40,
     onPlay,
     onPause,
     onStop,
-    onSeekFrame,
     onSeek,
   }: Props = $props();
 
@@ -388,7 +386,7 @@
 
   // Update playhead position (just CSS, no canvas drawing!)
   function updatePlayheadPosition() {
-    if (!samples || playbackFrameIndex < 0 || frameAnalysisData.length === 0) {
+    if (!samples || playbackFrameIndex < 0 || frames.length === 0) {
       playheadX = -1;
       return;
     }
@@ -418,7 +416,7 @@
   }
 
   function handleCanvasClick(e: MouseEvent) {
-    if (!canvas || !samples || !onSeek || frameAnalysisData.length === 0) return;
+    if (!canvas || !samples || !onSeek || frames.length === 0) return;
 
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -428,10 +426,7 @@
 
     // Convert to frame index
     const samplesPerFrame = Math.floor(8000 / frameRate);
-    const frameIndex = Math.min(
-      frameAnalysisData.length - 1,
-      Math.floor(sampleIndex / samplesPerFrame)
-    );
+    const frameIndex = Math.min(frames.length - 1, Math.floor(sampleIndex / samplesPerFrame));
 
     onSeek(frameIndex);
   }
@@ -456,7 +451,7 @@
 
   // Expose scroll method for explicit calls from parent (when user seeks)
   export function scrollToPlayhead() {
-    if (playbackFrameIndex >= 0 && playbackFrameIndex < frameAnalysisData.length) {
+    if (playbackFrameIndex >= 0 && playbackFrameIndex < frames.length) {
       scrollToFrame(playbackFrameIndex);
     }
   }
@@ -469,23 +464,9 @@
       {#if showPlaybackControls}
         <div class="playback-controls">
           <button class="btn btn-small" onclick={onPlay}>
-            {isPlaying && !isPaused ? '⏸ Pause' : '▶️ Play'}
+            {isPlaying && !isPaused ? 'Pause' : 'Play'}
           </button>
-          <button
-            class="btn btn-small"
-            onclick={() => onSeekFrame?.(-1)}
-            disabled={!canSeek || !isPaused}
-          >
-            ⟨ Frame
-          </button>
-          <button
-            class="btn btn-small"
-            onclick={() => onSeekFrame?.(1)}
-            disabled={!canSeek || !isPaused}
-          >
-            Frame ⟩
-          </button>
-          <button class="btn btn-small" onclick={onStop} disabled={!canSeek}> ■ Stop </button>
+          <button class="btn btn-small" onclick={onStop} disabled={!seekEnabled}> Stop </button>
         </div>
       {/if}
     </div>
