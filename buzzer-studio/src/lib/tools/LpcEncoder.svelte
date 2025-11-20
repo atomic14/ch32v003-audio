@@ -691,24 +691,26 @@ const unsigned int ${baseName}_lpc_len = sizeof(${baseName}_lpc);
   <FileUploadSection {fileName} {statusMessage} onFileSelect={handleFile} />
 
   {#if showWaveforms && rawSamples}
-    <WaveformCanvas
-      bind:this={waveformCanvasRef}
-      samples={rawSamples}
-      color="#00ff88"
-      label="Raw Input Waveform"
-      showPlaybackControls={true}
-      {playbackFrameIndex}
-      frameAnalysisData={frameAnalysisSet?.frames ?? []}
-      isPlaying={playbackWhich === 'raw'}
-      {isPaused}
-      canSeek={!!playbackWhich}
-      frameRate={encoderSettings.frameRate}
-      onPlay={togglePlayRaw}
-      onPause={togglePlayRaw}
-      onStop={stopAudio}
-      onSeekFrame={seekToFrame}
-      onSeek={jumpToFrame}
-    />
+    <div style="margin-bottom: 1.5rem;">
+      <WaveformCanvas
+        bind:this={waveformCanvasRef}
+        samples={rawSamples}
+        color="#00ff88"
+        label="Raw Input Waveform"
+        showPlaybackControls={true}
+        {playbackFrameIndex}
+        frameAnalysisData={frameAnalysisSet?.frames ?? []}
+        isPlaying={playbackWhich === 'raw'}
+        {isPaused}
+        canSeek={!!playbackWhich}
+        frameRate={encoderSettings.frameRate}
+        onPlay={togglePlayRaw}
+        onPause={togglePlayRaw}
+        onStop={stopAudio}
+        onSeekFrame={seekToFrame}
+        onSeek={jumpToFrame}
+      />
+    </div>
   {/if}
 
   <EncoderSettings bind:settings={encoderSettings} />

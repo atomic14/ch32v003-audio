@@ -5,6 +5,7 @@
     samples: Float32Array;
     color?: string;
     label?: string;
+    showHeader?: boolean;
     showPlaybackControls?: boolean;
     playbackFrameIndex?: number;
     frameAnalysisData?: FrameAnalysis[];
@@ -24,6 +25,7 @@
     samples,
     color = '#00ff88',
     label = 'Waveform',
+    showHeader = true,
     showPlaybackControls = false,
     playbackFrameIndex = -1,
     frameAnalysisData = [],
@@ -40,21 +42,256 @@
   }: Props = $props();
 
   let canvas = $state<HTMLCanvasElement>();
-  let overlayCanvas = $state<HTMLCanvasElement>();
+  let spectrogramCanvas = $state<HTMLCanvasElement>();
   let scrollContainer = $state<HTMLDivElement>();
-  let waveformSpacer = $state<HTMLDivElement>();
 
   // Fixed time scale: 400 pixels per second
   // At 8kHz sample rate: 8000 samples/second / 400 pixels/second = 20 samples/pixel
   const SAMPLES_PER_PIXEL = 20;
   const CANVAS_HEIGHT = 150;
-  const VIEWPORT_BUFFER = 500; // Extra pixels to render on each side
+  const SPECTROGRAM_HEIGHT = 100;
+  const FFT_SIZE = 512;
+  const SPECTROGRAM_HOP = 128; // Hop size for spectrogram computation
 
-  let scrollLeft = $state(0);
-  let lastSeekFrame = $state(-1);
-  let currentRenderStart = $state(0);
-  let currentRenderWidth = $state(0);
-  let scrollRaf: number | null = null;
+  // Inferno-inspired colormap for spectrogram (perceptually uniform, good for audio)
+  function getSpectrogramColor(value: number): [number, number, number] {
+    // Value is 0-1, maps to dark purple -> red -> yellow -> white
+    const t = Math.max(0, Math.min(1, value));
+
+    if (t < 0.25) {
+      // Black to dark purple
+      const s = t / 0.25;
+      return [Math.round(s * 60), 0, Math.round(s * 80)];
+    } else if (t < 0.5) {
+      // Dark purple to red-orange
+      const s = (t - 0.25) / 0.25;
+      return [Math.round(60 + s * 180), Math.round(s * 50), Math.round(80 - s * 80)];
+    } else if (t < 0.75) {
+      // Red-orange to yellow
+      const s = (t - 0.5) / 0.25;
+      return [Math.round(240 + s * 15), Math.round(50 + s * 180), 0];
+    } else {
+      // Yellow to white
+      const s = (t - 0.75) / 0.25;
+      return [255, Math.round(230 + s * 25), Math.round(s * 200)];
+    }
+  }
+
+  // Simple FFT implementation (radix-2 Cooley-Tukey)
+  function fft(real: Float32Array, imag: Float32Array): void {
+    const n = real.length;
+
+    // Bit-reverse permutation
+    for (let i = 0, j = 0; i < n; i++) {
+      if (i < j) {
+        [real[i], real[j]] = [real[j], real[i]];
+        [imag[i], imag[j]] = [imag[j], imag[i]];
+      }
+      let m = n >> 1;
+      while (m >= 1 && j >= m) {
+        j -= m;
+        m >>= 1;
+      }
+      j += m;
+    }
+
+    // Cooley-Tukey FFT
+    for (let size = 2; size <= n; size *= 2) {
+      const halfSize = size / 2;
+      const step = (2 * Math.PI) / size;
+
+      for (let i = 0; i < n; i += size) {
+        for (let j = 0; j < halfSize; j++) {
+          const angle = -step * j;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+
+          const evenIdx = i + j;
+          const oddIdx = i + j + halfSize;
+
+          const tReal = cos * real[oddIdx] - sin * imag[oddIdx];
+          const tImag = sin * real[oddIdx] + cos * imag[oddIdx];
+
+          real[oddIdx] = real[evenIdx] - tReal;
+          imag[oddIdx] = imag[evenIdx] - tImag;
+          real[evenIdx] = real[evenIdx] + tReal;
+          imag[evenIdx] = imag[evenIdx] + tImag;
+        }
+      }
+    }
+  }
+
+  // Generate Hann window
+  function hannWindow(size: number): Float32Array {
+    const window = new Float32Array(size);
+    for (let i = 0; i < size; i++) {
+      window[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / (size - 1)));
+    }
+    return window;
+  }
+
+  // Compute spectrogram data using fixed hop size
+  function computeSpectrogram(samples: Float32Array): Float32Array[] {
+    const numFrames = Math.ceil(samples.length / SPECTROGRAM_HOP);
+    const window = hannWindow(FFT_SIZE);
+    const spectrogram: Float32Array[] = [];
+
+    for (let frame = 0; frame < numFrames; frame++) {
+      const startSample = frame * SPECTROGRAM_HOP;
+
+      // Prepare FFT input with windowing
+      const real = new Float32Array(FFT_SIZE);
+      const imag = new Float32Array(FFT_SIZE);
+
+      for (let i = 0; i < FFT_SIZE; i++) {
+        const sampleIdx = startSample + i - FFT_SIZE / 2;
+        if (sampleIdx >= 0 && sampleIdx < samples.length) {
+          real[i] = samples[sampleIdx] * window[i];
+        } else {
+          real[i] = 0;
+        }
+        imag[i] = 0;
+      }
+
+      // Compute FFT
+      fft(real, imag);
+
+      // Compute magnitude spectrum (only positive frequencies)
+      const magnitudes = new Float32Array(FFT_SIZE / 2);
+      for (let i = 0; i < FFT_SIZE / 2; i++) {
+        magnitudes[i] = Math.sqrt(real[i] * real[i] + imag[i] * imag[i]);
+      }
+
+      spectrogram.push(magnitudes);
+    }
+
+    return spectrogram;
+  }
+
+  // Map linear bin to logarithmic frequency scale
+  function mapToLogScale(
+    spectrumData: Float32Array,
+    outputBins: number,
+    minFreq: number,
+    maxFreq: number,
+    sampleRate: number
+  ): Float32Array {
+    const output = new Float32Array(outputBins);
+    const nyquist = sampleRate / 2;
+    const binWidth = nyquist / spectrumData.length;
+
+    const logMin = Math.log10(minFreq);
+    const logMax = Math.log10(maxFreq);
+
+    for (let i = 0; i < outputBins; i++) {
+      // Map output bin to logarithmic frequency
+      const logFreq = logMin + (i / (outputBins - 1)) * (logMax - logMin);
+      const freq = Math.pow(10, logFreq);
+
+      // Find corresponding FFT bin
+      const bin = freq / binWidth;
+      const binLow = Math.floor(bin);
+      const binHigh = Math.ceil(bin);
+      const frac = bin - binLow;
+
+      // Interpolate between bins
+      if (binHigh < spectrumData.length) {
+        output[i] = spectrumData[binLow] * (1 - frac) + spectrumData[binHigh] * frac;
+      } else if (binLow < spectrumData.length) {
+        output[i] = spectrumData[binLow];
+      }
+    }
+
+    return output;
+  }
+
+  // Draw spectrogram to canvas
+  function drawSpectrogram() {
+    if (!spectrogramCanvas || !samples) return;
+
+    const ctx = spectrogramCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Calculate dimensions (CSS pixels)
+    const totalWidth = Math.ceil(samples.length / SAMPLES_PER_PIXEL);
+    const height = SPECTROGRAM_HEIGHT;
+
+    // Set canvas size with device pixel ratio
+    const dpr = window.devicePixelRatio || 1;
+    const canvasWidth = totalWidth * dpr;
+    const canvasHeight = height * dpr;
+
+    spectrogramCanvas.width = canvasWidth;
+    spectrogramCanvas.height = canvasHeight;
+    spectrogramCanvas.style.width = `${totalWidth}px`;
+    spectrogramCanvas.style.height = `${height}px`;
+
+    // Compute spectrogram
+    const spectrogramData = computeSpectrogram(samples);
+
+    // Find global max for normalization
+    let globalMax = 0;
+    for (const frame of spectrogramData) {
+      for (let i = 0; i < frame.length; i++) {
+        if (frame[i] > globalMax) globalMax = frame[i];
+      }
+    }
+
+    // Avoid division by zero
+    if (globalMax === 0) globalMax = 1;
+
+    // Create image data at full canvas resolution (not CSS pixels)
+    const imageData = ctx.createImageData(canvasWidth, canvasHeight);
+    const data = imageData.data;
+
+    // Frequency range for logarithmic scale (Hz)
+    const minFreq = 80; // Low enough for bass
+    const maxFreq = 4000; // Nyquist for 8kHz
+    const sampleRate = 8000;
+
+    // Number of spectrogram frames
+    const numFrames = spectrogramData.length;
+
+    // Draw each column at full resolution
+    for (let x = 0; x < canvasWidth; x++) {
+      // Map canvas pixel to CSS pixel, then to sample position
+      const cssX = x / dpr;
+      const samplePos = cssX * SAMPLES_PER_PIXEL;
+      const frameIndex = Math.min(Math.floor(samplePos / SPECTROGRAM_HOP), numFrames - 1);
+
+      // Map to logarithmic frequency scale
+      const logSpectrum = mapToLogScale(
+        spectrogramData[frameIndex],
+        canvasHeight,
+        minFreq,
+        maxFreq,
+        sampleRate
+      );
+
+      for (let y = 0; y < canvasHeight; y++) {
+        // Flip y so low frequencies are at bottom
+        const freqBin = canvasHeight - 1 - y;
+
+        // Normalize and apply logarithmic amplitude scaling
+        const magnitude = logSpectrum[freqBin] / globalMax;
+        const dB = 20 * Math.log10(magnitude + 1e-10);
+        // Map dB range (-60 to 0) to 0-1
+        const normalizedValue = Math.max(0, Math.min(1, (dB + 60) / 60));
+
+        const [r, g, b] = getSpectrogramColor(normalizedValue);
+        const idx = (y * canvasWidth + x) * 4;
+        data[idx] = r;
+        data[idx + 1] = g;
+        data[idx + 2] = b;
+        data[idx + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // CSS playhead position (reactively updated during playback)
+  let playheadX = $state(-1);
 
   function scrollToFrame(frameIndex: number) {
     if (!scrollContainer || !samples) return;
@@ -80,56 +317,40 @@
     }
   }
 
-  function drawWaveform() {
-    if (!canvas || !samples || !scrollContainer) return;
+  // Draw FULL waveform to canvas (called once when data loads)
+  function drawFullWaveform() {
+    if (!canvas || !samples) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Total waveform width
+    // Calculate FULL width
     const totalWidth = Math.ceil(samples.length / SAMPLES_PER_PIXEL);
-
-    // Viewport dimensions
-    const viewportWidth = scrollContainer.clientWidth;
-    const viewportStart = scrollLeft;
-    const viewportEnd = scrollLeft + viewportWidth;
-
-    // Calculate render region (viewport + buffer)
-    const renderStart = Math.max(0, viewportStart - VIEWPORT_BUFFER);
-    const renderEnd = Math.min(totalWidth, viewportEnd + VIEWPORT_BUFFER);
-    const renderWidth = renderEnd - renderStart;
     const height = CANVAS_HEIGHT;
 
-    // Store current render region for overlay
-    currentRenderStart = renderStart;
-    currentRenderWidth = renderWidth;
-
-    // Set canvas size to render region
+    // Set canvas to FULL size
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = renderWidth * dpr;
+    canvas.width = totalWidth * dpr;
     canvas.height = height * dpr;
-    canvas.style.width = `${renderWidth}px`;
+    canvas.style.width = `${totalWidth}px`;
     canvas.style.height = `${height}px`;
-
-    // Position canvas at the render start
-    canvas.style.position = 'absolute';
-    canvas.style.left = `${renderStart}px`;
 
     ctx.scale(dpr, dpr);
 
+    // Background
     ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, renderWidth, height);
+    ctx.fillRect(0, 0, totalWidth, height);
 
+    // Waveform
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
 
     const centerY = height / 2;
 
-    // Draw only the visible portion of the waveform
-    for (let x = 0; x < renderWidth; x++) {
-      const globalX = renderStart + x;
-      const sampleStart = Math.floor(globalX * SAMPLES_PER_PIXEL);
+    // Draw ENTIRE waveform
+    for (let x = 0; x < totalWidth; x++) {
+      const sampleStart = Math.floor(x * SAMPLES_PER_PIXEL);
       const sampleEnd = Math.min(sampleStart + SAMPLES_PER_PIXEL, samples.length);
 
       let min = 0;
@@ -161,109 +382,39 @@
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, centerY);
-    ctx.lineTo(renderWidth, centerY);
+    ctx.lineTo(totalWidth, centerY);
     ctx.stroke();
-
-    // Update spacer to maintain total scroll width
-    if (waveformSpacer) {
-      waveformSpacer.style.width = `${totalWidth}px`;
-      waveformSpacer.style.height = `${height}px`;
-    }
-
-    // Update overlay canvas position and size to match
-    if (overlayCanvas) {
-      overlayCanvas.width = renderWidth * dpr;
-      overlayCanvas.height = height * dpr;
-      overlayCanvas.style.width = `${renderWidth}px`;
-      overlayCanvas.style.height = `${height}px`;
-      overlayCanvas.style.position = 'absolute';
-      overlayCanvas.style.left = `${renderStart}px`;
-    }
-
-    // NOTE: Don't call drawPlayhead() here!
-    // That would create a reactive dependency on playbackFrameIndex,
-    // causing the waveform to redraw on every frame change.
-    // The overlay is drawn separately by its own effect.
   }
 
-  function drawPlayhead() {
-    if (!overlayCanvas || !samples || playbackFrameIndex < 0 || frameAnalysisData.length === 0) {
-      // Clear overlay if no playhead
-      if (overlayCanvas) {
-        const ctx = overlayCanvas.getContext('2d');
-        if (ctx) ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-      }
+  // Update playhead position (just CSS, no canvas drawing!)
+  function updatePlayheadPosition() {
+    if (!samples || playbackFrameIndex < 0 || frameAnalysisData.length === 0) {
+      playheadX = -1;
       return;
     }
 
-    const renderStart = currentRenderStart;
-    const renderEnd = renderStart + currentRenderWidth;
-
-    let globalXStart = 0;
-    let globalXEnd = 0;
-
+    // Calculate pixel position
+    let startSample = 0;
     if (encodedFrameStarts && encodedFrameStarts.length > 0) {
-      const start =
+      startSample =
         encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
-      const end =
-        encodedFrameStarts[Math.min(playbackFrameIndex + 1, encodedFrameStarts.length)] ??
-        samples.length;
-      globalXStart = Math.round(start / SAMPLES_PER_PIXEL);
-      globalXEnd = Math.round(end / SAMPLES_PER_PIXEL);
     } else {
       const samplesPerFrame = Math.floor(8000 / frameRate);
-      const startSample = playbackFrameIndex * samplesPerFrame;
-      const endSample = (playbackFrameIndex + 1) * samplesPerFrame;
-      globalXStart = Math.round(startSample / SAMPLES_PER_PIXEL);
-      globalXEnd = Math.round(endSample / SAMPLES_PER_PIXEL);
+      startSample = playbackFrameIndex * samplesPerFrame;
     }
 
-    // Skip drawing if playhead is not in visible viewport
-    if (globalXEnd < renderStart || globalXStart > renderEnd) {
-      return;
+    playheadX = Math.round(startSample / SAMPLES_PER_PIXEL);
+
+    // Auto-scroll to keep playhead visible (only during playback, not paused)
+    if (scrollContainer && !isPaused) {
+      const containerLeft = scrollContainer.scrollLeft;
+      const containerRight = containerLeft + scrollContainer.clientWidth;
+      const padding = 100;
+
+      if (playheadX < containerLeft + padding || playheadX > containerRight - padding) {
+        scrollContainer.scrollLeft = playheadX - scrollContainer.clientWidth / 2;
+      }
     }
-
-    const ctx = overlayCanvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const height = CANVAS_HEIGHT;
-
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // Clear previous playhead
-    ctx.clearRect(0, 0, currentRenderWidth, height);
-
-    // Draw playhead
-    const localXStart = Math.max(0, globalXStart - renderStart);
-    const localXEnd = Math.min(currentRenderWidth, globalXEnd - renderStart);
-    const framePx = Math.max(1, localXEnd - localXStart);
-
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.fillRect(localXStart, 0, framePx, height);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(localXStart, 0);
-    ctx.lineTo(localXStart, height);
-    ctx.stroke();
-
-    ctx.restore();
-  }
-
-  function handleScroll() {
-    if (!scrollContainer) return;
-
-    // Throttle scroll updates using RAF - only one redraw per frame
-    if (scrollRaf !== null) return;
-
-    scrollRaf = requestAnimationFrame(() => {
-      scrollRaf = null;
-      if (!scrollContainer) return;
-      scrollLeft = scrollContainer.scrollLeft;
-      drawWaveform();
-    });
   }
 
   function handleCanvasClick(e: MouseEvent) {
@@ -272,12 +423,8 @@
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
 
-    // Get global X position (accounting for canvas offset)
-    const canvasLeft = parseFloat(canvas.style.left || '0');
-    const globalX = canvasLeft + x;
-
-    // Calculate sample index from global pixel position
-    const sampleIndex = Math.floor(globalX * SAMPLES_PER_PIXEL);
+    // Calculate sample index from pixel position
+    const sampleIndex = Math.floor(x * SAMPLES_PER_PIXEL);
 
     // Convert to frame index
     const samplesPerFrame = Math.floor(8000 / frameRate);
@@ -289,77 +436,68 @@
     onSeek(frameIndex);
   }
 
-  // Redraw waveform when samples change
-  // Props change when parent creates new timestamped objects, triggering reliable redraws
+  // Draw waveform and spectrogram when samples change
   $effect(() => {
-    if (samples && canvas && scrollContainer) {
-      drawWaveform();
+    if (samples && canvas) {
+      drawFullWaveform();
     }
   });
 
-  // Expose drawPlayhead for imperative calls from parent
-  // NOTE: Don't make this an $effect! That creates a reactive dependency on playbackFrameIndex
-  // which causes redraws 60 times per second during playback.
-  // The parent component will call this explicitly when needed.
+  $effect(() => {
+    if (samples && spectrogramCanvas) {
+      drawSpectrogram();
+    }
+  });
+
+  // Export updatePlayhead for parent to call imperatively
   export function updatePlayhead() {
-    drawPlayhead();
+    updatePlayheadPosition();
   }
 
-  // Set up scroll listener
-  $effect(() => {
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-      return () => scrollContainer.removeEventListener('scroll', handleScroll);
-    }
-  });
-
-  // Auto-scroll to frame when seeking (paused or stopped)
-  $effect(() => {
-    // Only auto-scroll when:
-    // 1. Frame index changes (user clicked to seek)
-    // 2. Not actively playing (paused or stopped)
-    // 3. Frame is valid
-    if (playbackFrameIndex >= 0 && playbackFrameIndex !== lastSeekFrame && isPaused) {
+  // Expose scroll method for explicit calls from parent (when user seeks)
+  export function scrollToPlayhead() {
+    if (playbackFrameIndex >= 0 && playbackFrameIndex < frameAnalysisData.length) {
       scrollToFrame(playbackFrameIndex);
-      lastSeekFrame = playbackFrameIndex;
     }
-  });
+  }
 </script>
 
 <div class="waveform-container">
-  <div class="waveform-header">
-    <h4>{label}</h4>
-    {#if showPlaybackControls}
-      <div class="playback-controls">
-        <button class="btn btn-small" onclick={onPlay}>
-          {isPlaying && !isPaused ? '⏸ Pause' : '▶️ Play'}
-        </button>
-        <button
-          class="btn btn-small"
-          onclick={() => onSeekFrame?.(-1)}
-          disabled={!canSeek || !isPaused}
-        >
-          ⟨ Frame
-        </button>
-        <button
-          class="btn btn-small"
-          onclick={() => onSeekFrame?.(1)}
-          disabled={!canSeek || !isPaused}
-        >
-          Frame ⟩
-        </button>
-        <button class="btn btn-small" onclick={onStop} disabled={!canSeek}> ■ Stop </button>
-      </div>
-    {/if}
-  </div>
+  {#if showHeader}
+    <div class="waveform-header">
+      <h4>{label}</h4>
+      {#if showPlaybackControls}
+        <div class="playback-controls">
+          <button class="btn btn-small" onclick={onPlay}>
+            {isPlaying && !isPaused ? '⏸ Pause' : '▶️ Play'}
+          </button>
+          <button
+            class="btn btn-small"
+            onclick={() => onSeekFrame?.(-1)}
+            disabled={!canSeek || !isPaused}
+          >
+            ⟨ Frame
+          </button>
+          <button
+            class="btn btn-small"
+            onclick={() => onSeekFrame?.(1)}
+            disabled={!canSeek || !isPaused}
+          >
+            Frame ⟩
+          </button>
+          <button class="btn btn-small" onclick={onStop} disabled={!canSeek}> ■ Stop </button>
+        </div>
+      {/if}
+    </div>
+  {/if}
   <div class="waveform-scroll-container" bind:this={scrollContainer}>
-    <div class="waveform-spacer" bind:this={waveformSpacer}>
-      <canvas bind:this={canvas} class="waveform-canvas"></canvas>
-      <canvas
-        bind:this={overlayCanvas}
-        class="waveform-canvas waveform-overlay"
-        onclick={handleCanvasClick}
+    <div class="waveform-canvas-wrapper">
+      <canvas bind:this={canvas} class="waveform-canvas" onclick={handleCanvasClick}></canvas>
+      <canvas bind:this={spectrogramCanvas} class="spectrogram-canvas" onclick={handleCanvasClick}
       ></canvas>
+      {#if playheadX >= 0}
+        <div class="playhead-overlay" style="left: {playheadX}px;"></div>
+      {/if}
     </div>
   </div>
   <p class="waveform-info">
@@ -401,20 +539,45 @@
     position: relative;
   }
 
-  .waveform-spacer {
+  .waveform-canvas-wrapper {
     position: relative;
-    background: #1a1a2e;
+    display: inline-block;
   }
 
   .waveform-canvas {
     display: block;
     background: transparent;
     border: none;
+    cursor: pointer;
   }
 
-  .waveform-overlay {
-    pointer-events: all;
+  .spectrogram-canvas {
+    display: block;
+    background: transparent;
+    border: none;
     cursor: pointer;
+    margin-top: 2px;
+  }
+
+  .playhead-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: rgba(255, 255, 255, 0.8);
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+  }
+
+  .playhead-overlay::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    right: -8px;
+    top: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .waveform-info {

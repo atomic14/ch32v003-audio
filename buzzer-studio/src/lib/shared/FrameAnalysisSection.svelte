@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FrameAnalysis } from '../../lpcEncoder';
+  import WaveformCanvas from './WaveformCanvas.svelte';
 
   type FrameOverride = {
     originalClassification: 'voiced' | 'unvoiced' | 'silent';
@@ -46,45 +47,14 @@
   }: Props = $props();
 
   let frameTimeline = $state<HTMLCanvasElement>();
-  let waveformEncoded = $state<HTMLCanvasElement>();
   let frameDetailsTooltip = $state<HTMLDivElement>();
-  let waveformScrollContainer = $state<HTMLDivElement>();
   let frameTimelineScrollContainer = $state<HTMLDivElement>();
+  let waveformCanvasRef = $state<WaveformCanvas | null>(null);
 
-  // Fixed time scale: 400 pixels per second
-  // At 8kHz sample rate: 8000 samples/second / 400 pixels/second = 20 samples/pixel
-  const SAMPLES_PER_PIXEL = 20;
-  const CANVAS_HEIGHT = 150;
-
-  // CSS playhead positions (reactively updated during playback)
-  let waveformPlayheadX = $state(-1);
+  // CSS playhead position for timeline (reactively updated during playback)
   let timelinePlayheadX = $state(-1);
 
   let showWaveforms = $derived(encodedSamples !== null);
-
-  function scrollToFrame(frameIndex: number) {
-    if (!waveformScrollContainer || !encodedSamples) return;
-
-    // Calculate pixel position of the frame
-    const samplesPerFrame = Math.floor(8000 / frameRate);
-    const samplePosition = frameIndex * samplesPerFrame;
-    const pixelPosition = samplePosition / SAMPLES_PER_PIXEL;
-
-    // Only scroll if frame is not in view
-    const currentScroll = waveformScrollContainer.scrollLeft;
-    const viewportWidth = waveformScrollContainer.clientWidth;
-    const viewportStart = currentScroll;
-    const viewportEnd = currentScroll + viewportWidth;
-
-    // Add some padding (10% of viewport) for better UX
-    const padding = viewportWidth * 0.1;
-
-    if (pixelPosition < viewportStart + padding || pixelPosition > viewportEnd - padding) {
-      // Center the frame in the viewport
-      const scrollTarget = Math.max(0, pixelPosition - viewportWidth / 2);
-      waveformScrollContainer.scrollLeft = scrollTarget;
-    }
-  }
 
   function scrollFrameTimelineToFrame(frameIndex: number) {
     if (!frameTimelineScrollContainer || frameAnalysisData.length === 0) return;
@@ -111,111 +81,6 @@
       frameTimelineScrollContainer.scrollLeft = scrollTarget;
     }
   }
-
-  // Draw FULL waveform to canvas (called once when data loads)
-  function drawFullWaveform(canvas: HTMLCanvasElement, samples: Float32Array, color: string) {
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Calculate FULL width
-    const totalWidth = Math.ceil(samples.length / SAMPLES_PER_PIXEL);
-    const height = CANVAS_HEIGHT;
-
-    // Set canvas to FULL size
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = totalWidth * dpr;
-    canvas.height = height * dpr;
-    canvas.style.width = `${totalWidth}px`;
-    canvas.style.height = `${height}px`;
-
-    ctx.scale(dpr, dpr);
-
-    // Background
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fillRect(0, 0, totalWidth, height);
-
-    // Waveform
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-
-    const centerY = height / 2;
-
-    // Draw ENTIRE waveform
-    for (let x = 0; x < totalWidth; x++) {
-      const sampleStart = Math.floor(x * SAMPLES_PER_PIXEL);
-      const sampleEnd = Math.min(sampleStart + SAMPLES_PER_PIXEL, samples.length);
-
-      let min = 0;
-      let max = 0;
-
-      for (let i = sampleStart; i < sampleEnd; i++) {
-        if (samples[i] < min) min = samples[i];
-        if (samples[i] > max) max = samples[i];
-      }
-
-      const yMin = centerY - min * centerY;
-      const yMax = centerY - max * centerY;
-
-      if (x === 0) {
-        ctx.moveTo(x, yMax);
-      } else {
-        ctx.lineTo(x, yMax);
-      }
-
-      if (yMin !== yMax) {
-        ctx.lineTo(x, yMin);
-      }
-    }
-
-    ctx.stroke();
-
-    // Center line
-    ctx.strokeStyle = '#444';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, centerY);
-    ctx.lineTo(totalWidth, centerY);
-    ctx.stroke();
-  }
-
-  // Update waveform playhead position (just CSS, no canvas drawing!)
-  function updateWaveformPlayheadPosition() {
-    if (!encodedSamples || playbackFrameIndex < 0 || frameAnalysisData.length === 0) {
-      waveformPlayheadX = -1;
-      return;
-    }
-
-    // Calculate pixel position
-    let startSample = 0;
-    if (encodedFrameStarts && encodedFrameStarts.length > 0) {
-      startSample =
-        encodedFrameStarts[Math.min(playbackFrameIndex, encodedFrameStarts.length - 1)] ?? 0;
-    } else {
-      const samplesPerFrame = Math.floor(8000 / frameRate);
-      startSample = playbackFrameIndex * samplesPerFrame;
-    }
-
-    waveformPlayheadX = Math.round(startSample / SAMPLES_PER_PIXEL);
-
-    // Auto-scroll to keep playhead visible (only during playback, not paused)
-    if (waveformScrollContainer && !isPaused) {
-      const containerLeft = waveformScrollContainer.scrollLeft;
-      const containerRight = containerLeft + waveformScrollContainer.clientWidth;
-      const padding = 100;
-
-      if (
-        waveformPlayheadX < containerLeft + padding ||
-        waveformPlayheadX > containerRight - padding
-      ) {
-        waveformScrollContainer.scrollLeft =
-          waveformPlayheadX - waveformScrollContainer.clientWidth / 2;
-      }
-    }
-  }
-
-  // No need for scroll handler - canvas doesn't need redrawing!
-  // Scrolling now just moves the viewport over the full canvas
 
   function drawFrameTimeline() {
     if (!frameTimeline || frameAnalysisData.length === 0 || !encodedSamples) return;
@@ -425,29 +290,10 @@
     }
   }
 
-  function handleWaveformClick(e: MouseEvent) {
-    if (!waveformEncoded || !encodedSamples || frameAnalysisData.length === 0) return;
-
-    const rect = waveformEncoded.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-
-    // Get global X position (accounting for canvas offset)
-    const canvasLeft = parseFloat(waveformEncoded.style.left || '0');
-    const globalX = canvasLeft + x;
-
-    // Calculate sample index from global pixel position
-    const sampleIndex = Math.floor(globalX * SAMPLES_PER_PIXEL);
-
-    // Convert to frame index
-    const samplesPerFrame = Math.floor(8000 / frameRate);
-    const frameIndex = Math.min(
-      frameAnalysisData.length - 1,
-      Math.floor(sampleIndex / samplesPerFrame)
-    );
-
+  // Handle waveform click - scroll frame timeline and seek
+  function handleWaveformSeek(frameIndex: number) {
     // Scroll frame timeline to show the clicked frame
     scrollFrameTimelineToFrame(frameIndex);
-
     onSeekToFrame(frameIndex);
   }
 
@@ -567,8 +413,8 @@
         // Select this frame
         selectedFrameIndex = frameIndex;
         // Scroll waveform to show the clicked frame
-        scrollToFrame(frameIndex);
         onSeekToFrame(frameIndex);
+        waveformCanvasRef?.scrollToPlayhead();
       }
     }
 
@@ -584,14 +430,6 @@
   }
 
   let selectedFrameIndex = $state<number | null>(null);
-
-  // Draw waveform when data changes
-  // Props change when parent creates new timestamped objects, triggering reliable redraws
-  $effect(() => {
-    if (encodedSamples && waveformEncoded) {
-      drawFullWaveform(waveformEncoded, encodedSamples, '#ff6b6b');
-    }
-  });
 
   // Draw timeline when data changes
   // Props change when parent creates new timestamped objects, triggering reliable redraws
@@ -612,7 +450,7 @@
   // Update playhead positions reactively (exported for parent to call)
   // These just update CSS positions - no canvas drawing!
   export function updateWaveformPlayhead() {
-    updateWaveformPlayheadPosition();
+    waveformCanvasRef?.updatePlayhead();
   }
 
   export function updateTimelinePlayhead() {
@@ -622,7 +460,7 @@
   // Expose scroll method for explicit calls from parent (when user seeks)
   export function scrollToPlayhead() {
     if (playbackFrameIndex >= 0 && playbackFrameIndex < frameAnalysisData.length) {
-      scrollToFrame(playbackFrameIndex);
+      waveformCanvasRef?.scrollToPlayhead();
       scrollFrameTimelineToFrame(playbackFrameIndex);
     }
   }
@@ -631,7 +469,175 @@
 <section class="frame-analysis-section">
   <h3>Result</h3>
 
-  <details class="explanation-box">
+  {#if showWaveforms && encodedSamples}
+    <div class="waveform-inline">
+      <div class="waveform-header">
+        <h4>LPC Encoded/Decoded Waveform</h4>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button class="btn btn-small" onclick={onTogglePlayEncoded}>
+              {playbackWhich === 'encoded' && !isPaused ? '⏸ Pause' : '▶️ Play'}
+            </button>
+            <button
+              class="btn btn-small"
+              onclick={() => onSeekFrame(-1)}
+              disabled={!playbackWhich || !isPaused}
+            >
+              ⟨ Frame
+            </button>
+            <button
+              class="btn btn-small"
+              onclick={() => onSeekFrame(1)}
+              disabled={!playbackWhich || !isPaused}
+            >
+              Frame ⟩
+            </button>
+            <button class="btn btn-small" onclick={onDumpSamples}>Dump samples</button>
+            <button class="btn btn-small" onclick={onStopAudio} disabled={!playbackWhich}>
+              ■ Stop
+            </button>
+            <button
+              class="btn btn-small btn-warning"
+              onclick={onClearAllOverrides}
+              disabled={frameOverrides.size === 0}
+            >
+              🔄 Reset Overrides ({frameOverrides.size})
+            </button>
+          </div>
+        </div>
+      </div>
+      <WaveformCanvas
+        bind:this={waveformCanvasRef}
+        samples={encodedSamples}
+        color="#ff6b6b"
+        showHeader={false}
+        {playbackFrameIndex}
+        {frameAnalysisData}
+        {encodedFrameStarts}
+        isPlaying={playbackWhich === 'encoded'}
+        {isPaused}
+        canSeek={!!playbackWhich}
+        {frameRate}
+        onSeek={handleWaveformSeek}
+      />
+    </div>
+  {/if}
+
+  <div class="frame-timeline-container" bind:this={frameTimelineScrollContainer}>
+    <div class="frame-timeline-wrapper">
+      <canvas bind:this={frameTimeline} class="frame-timeline-canvas"></canvas>
+      {#if timelinePlayheadX >= 0}
+        <div class="timeline-playhead-overlay" style="left: {timelinePlayheadX}px;"></div>
+      {/if}
+    </div>
+  </div>
+  <div bind:this={frameDetailsTooltip} class="frame-details"></div>
+
+  {#if selectedFrameIndex !== null && frameAnalysisData[selectedFrameIndex]}
+    {@const frame = frameAnalysisData[selectedFrameIndex]}
+    {@const frameType = frame.isSilent ? 'SILENCE' : frame.isVoiced ? 'VOICED' : 'UNVOICED'}
+    {@const frameClass = frame.isSilent ? 'silence' : frame.isVoiced ? 'voiced' : 'unvoiced'}
+    {@const currentOverride = frameOverrides.get(selectedFrameIndex)}
+    {@const overrideLabel = currentOverride
+      ? ` (${currentOverride.originalClassification.toUpperCase()} → ${currentOverride.newClassification.toUpperCase()})`
+      : ''}
+    {@const criterionStatus = [
+      !frame.criterion1Pass ? 'Energy too low' : null,
+      !frame.criterion2Pass ? 'Energy ratio failed' : null,
+      !frame.criterion3Pass ? 'Pitch quality too low' : null,
+    ].filter(Boolean)}
+    {@const kVals = (frame.ks && frame.ks.length ? frame.ks.slice(1, 11) : []).map(
+      (v, i) => `K${i + 1}: ${v.toFixed(3)}`
+    )}
+
+    <div class="selected-frame-panel">
+      <div class="selected-frame-header {frameClass}">
+        <span>Frame {selectedFrameIndex} - {frameType}{overrideLabel}</span>
+        <button class="btn-close" onclick={() => (selectedFrameIndex = null)}>✕</button>
+      </div>
+
+      <div class="selected-frame-content">
+        <div class="frame-details-grid">
+          <div class="detail-group">
+            <h5>Signal Properties</h5>
+            <div class="detail-item">
+              <span class="detail-label">Detected Pitch:</span>
+              <span class="detail-value"
+                >{frame.detectedPitchHz.toFixed(1)} Hz{frame.pitchIsReliable
+                  ? ''
+                  : ' (unreliable)'}</span
+              >
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Final Pitch:</span>
+              <span class="detail-value">{frame.finalPitchHz.toFixed(1)} Hz</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Pitch Quality:</span>
+              <span class="detail-value">{(frame.pitchQuality * 100).toFixed(1)}%</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">Energy Ratio:</span>
+              <span class="detail-value">{frame.energyRatio.toFixed(2)}</span>
+            </div>
+            <div class="detail-item">
+              <span class="detail-label">RMS:</span>
+              <span class="detail-value">{frame.rms.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {#if kVals.length > 0}
+            <div class="detail-group">
+              <h5>LPC Coefficients (K1–K10)</h5>
+              <div class="k-values-grid">
+                {#each kVals as kVal}
+                  <span class="k-value">{kVal}</span>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if criterionStatus.length > 0}
+            <div class="detail-group">
+              <h5>Failed Criteria</h5>
+              {#each criterionStatus as status}
+                <div class="criterion-failed">• {status}</div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <div class="override-section">
+          <h5>Force Classification</h5>
+          <div class="override-buttons">
+            <button
+              class="override-btn voiced-btn"
+              onclick={() => onFrameOverride(selectedFrameIndex!, 'voiced')}
+              disabled={currentOverride?.newClassification === 'voiced'}
+            >
+              🟢 Voiced
+            </button>
+            <button
+              class="override-btn unvoiced-btn"
+              onclick={() => onFrameOverride(selectedFrameIndex!, 'unvoiced')}
+              disabled={currentOverride?.newClassification === 'unvoiced'}
+            >
+              🔴 Unvoiced
+            </button>
+            <button
+              class="override-btn silent-btn"
+              onclick={() => onFrameOverride(selectedFrameIndex!, 'silent')}
+              disabled={currentOverride?.newClassification === 'silent'}
+            >
+              ⚫ Silent
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <details class="explanation-box" style="margin-top: 2rem;">
     <summary class="explanation-summary">ℹ️ What do "Voiced" and "Unvoiced" mean?</summary>
     <div class="explanation-content">
       <div class="explanation-row">
@@ -757,172 +763,6 @@
       </div>
     </div>
   </details>
-
-  {#if showWaveforms && encodedSamples}
-    <div class="waveform-inline">
-      <div class="waveform-header">
-        <h4>LPC Encoded/Decoded Waveform</h4>
-        <div style="display: flex; gap: 1rem; align-items: center;">
-          <div style="display: flex; gap: 0.5rem; align-items: center;">
-            <button class="btn btn-small" onclick={onTogglePlayEncoded}>
-              {playbackWhich === 'encoded' && !isPaused ? '⏸ Pause' : '▶️ Play'}
-            </button>
-            <button
-              class="btn btn-small"
-              onclick={() => onSeekFrame(-1)}
-              disabled={!playbackWhich || !isPaused}
-            >
-              ⟨ Frame
-            </button>
-            <button
-              class="btn btn-small"
-              onclick={() => onSeekFrame(1)}
-              disabled={!playbackWhich || !isPaused}
-            >
-              Frame ⟩
-            </button>
-            <button class="btn btn-small" onclick={onDumpSamples}>Dump samples</button>
-            <button class="btn btn-small" onclick={onStopAudio} disabled={!playbackWhich}>
-              ■ Stop
-            </button>
-            <button
-              class="btn btn-small btn-warning"
-              onclick={onClearAllOverrides}
-              disabled={frameOverrides.size === 0}
-            >
-              🔄 Reset Overrides ({frameOverrides.size})
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="waveform-scroll-container" bind:this={waveformScrollContainer}>
-        <div class="waveform-canvas-wrapper">
-          <canvas bind:this={waveformEncoded} class="waveform-canvas" onclick={handleWaveformClick}
-          ></canvas>
-          {#if waveformPlayheadX >= 0}
-            <div class="playhead-overlay" style="left: {waveformPlayheadX}px;"></div>
-          {/if}
-        </div>
-      </div>
-      <p class="waveform-info">
-        {encodedSamples.length} samples ({(encodedSamples.length / 8000).toFixed(2)}s), 8kHz
-      </p>
-    </div>
-  {/if}
-
-  <div class="frame-timeline-container" bind:this={frameTimelineScrollContainer}>
-    <div class="frame-timeline-wrapper">
-      <canvas bind:this={frameTimeline} class="frame-timeline-canvas"></canvas>
-      {#if timelinePlayheadX >= 0}
-        <div class="timeline-playhead-overlay" style="left: {timelinePlayheadX}px;"></div>
-      {/if}
-    </div>
-  </div>
-  <div bind:this={frameDetailsTooltip} class="frame-details"></div>
-
-  {#if selectedFrameIndex !== null && frameAnalysisData[selectedFrameIndex]}
-    {@const frame = frameAnalysisData[selectedFrameIndex]}
-    {@const frameType = frame.isSilent ? 'SILENCE' : frame.isVoiced ? 'VOICED' : 'UNVOICED'}
-    {@const frameClass = frame.isSilent ? 'silence' : frame.isVoiced ? 'voiced' : 'unvoiced'}
-    {@const currentOverride = frameOverrides.get(selectedFrameIndex)}
-    {@const overrideLabel = currentOverride
-      ? ` (${currentOverride.originalClassification.toUpperCase()} → ${currentOverride.newClassification.toUpperCase()})`
-      : ''}
-    {@const criterionStatus = [
-      !frame.criterion1Pass ? 'Energy too low' : null,
-      !frame.criterion2Pass ? 'Energy ratio failed' : null,
-      !frame.criterion3Pass ? 'Pitch quality too low' : null,
-    ].filter(Boolean)}
-    {@const kVals = (frame.ks && frame.ks.length ? frame.ks.slice(1, 11) : []).map(
-      (v, i) => `K${i + 1}: ${v.toFixed(3)}`
-    )}
-
-    <div class="selected-frame-panel">
-      <div class="selected-frame-header {frameClass}">
-        <span>Frame {selectedFrameIndex} - {frameType}{overrideLabel}</span>
-        <button class="btn-close" onclick={() => (selectedFrameIndex = null)}>✕</button>
-      </div>
-
-      <div class="selected-frame-content">
-        <div class="frame-details-grid">
-          <div class="detail-group">
-            <h5>Signal Properties</h5>
-            <div class="detail-item">
-              <span class="detail-label">Detected Pitch:</span>
-              <span class="detail-value"
-                >{frame.detectedPitchHz.toFixed(1)} Hz{frame.pitchIsReliable
-                  ? ''
-                  : ' (unreliable)'}</span
-              >
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Final Pitch:</span>
-              <span class="detail-value">{frame.finalPitchHz.toFixed(1)} Hz</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Pitch Quality:</span>
-              <span class="detail-value">{(frame.pitchQuality * 100).toFixed(1)}%</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">Energy Ratio:</span>
-              <span class="detail-value">{frame.energyRatio.toFixed(2)}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">RMS:</span>
-              <span class="detail-value">{frame.rms.toFixed(2)}</span>
-            </div>
-          </div>
-
-          {#if kVals.length > 0}
-            <div class="detail-group">
-              <h5>LPC Coefficients (K1–K10)</h5>
-              <div class="k-values-grid">
-                {#each kVals as kVal}
-                  <span class="k-value">{kVal}</span>
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          {#if criterionStatus.length > 0}
-            <div class="detail-group">
-              <h5>Failed Criteria</h5>
-              {#each criterionStatus as status}
-                <div class="criterion-failed">• {status}</div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <div class="override-section">
-          <h5>Force Classification</h5>
-          <div class="override-buttons">
-            <button
-              class="override-btn voiced-btn"
-              onclick={() => onFrameOverride(selectedFrameIndex!, 'voiced')}
-              disabled={currentOverride?.newClassification === 'voiced'}
-            >
-              🟢 Voiced
-            </button>
-            <button
-              class="override-btn unvoiced-btn"
-              onclick={() => onFrameOverride(selectedFrameIndex!, 'unvoiced')}
-              disabled={currentOverride?.newClassification === 'unvoiced'}
-            >
-              🔴 Unvoiced
-            </button>
-            <button
-              class="override-btn silent-btn"
-              onclick={() => onFrameOverride(selectedFrameIndex!, 'silent')}
-              disabled={currentOverride?.newClassification === 'silent'}
-            >
-              ⚫ Silent
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  {/if}
 </section>
 
 <style>
@@ -1037,56 +877,11 @@
     margin: 0;
   }
 
-  .waveform-scroll-container {
-    width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    background: #1a1a2e;
-    border-radius: 4px;
-    position: relative;
-  }
-
-  .waveform-spacer {
-    position: relative;
-    background: #1a1a2e;
-  }
-
-  .waveform-canvas {
-    display: block;
+  /* Override WaveformCanvas container styles when used inline */
+  .waveform-inline :global(.waveform-container) {
+    margin-top: 0;
+    padding: 0;
     background: transparent;
-    border: none;
-  }
-
-  .waveform-canvas-wrapper {
-    position: relative;
-    display: inline-block;
-  }
-
-  .playhead-overlay {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: rgba(255, 255, 255, 0.8);
-    pointer-events: none;
-    z-index: 10;
-    box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
-  }
-
-  .playhead-overlay::before {
-    content: '';
-    position: absolute;
-    left: -8px;
-    right: -8px;
-    top: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .waveform-info {
-    margin: 0.5rem 0 0 0;
-    font-size: 0.85rem;
-    color: #888;
   }
 
   .btn {
